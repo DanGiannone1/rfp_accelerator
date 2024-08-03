@@ -1,0 +1,11 @@
+
+python-dotenv
+azure-storage-blob
+azure-ai-documentintelligence==1.0.0b1
+azure-cosmos==4.5.1
+azure-search-documents==11.4.0
+azure-ai-formrecognizer==3.3.1
+openai==1.35.13
+Flask
+flask-cors
+langchain
