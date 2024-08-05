@@ -13,7 +13,9 @@ import azure.cosmos.exceptions as exceptions
 from azure.cosmos.partition_key import PartitionKey
 import time
 from langchain_openai import AzureChatOpenAI
-
+from azure.storage.blob import BlobServiceClient
+import os
+from werkzeug.datastructures import FileStorage
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 from azure.storage.blob import ContentSettings
 from io import BytesIO
@@ -23,121 +25,28 @@ from azure.eventhub import EventHubProducerClient, EventData
 from prompts import *
 from rfp import *
 
-md_toc = """1 | Minimum Qualifications | 1 | [1,1]
-1.1 | Offeror Minimum Qualifications | 1 | [1,1]
-2 | Contractor Requirements: Scope of Work | 2 | [2,30]
-2.1 | Summary Statement | 2 | [2,2]
-2.2 | Background, Purpose and Goals | 2 | [2,5]
-2.3 | Responsibilities and Tasks | 5 | [5,19]
-2.4 | Deliverables | 19 | [19,30]
-2.5 | Optional Features or Services | 30 | [30,30]
-2.6 | Service Level Agreement (SLA) | 30 | [30,30]
-3 | Contractor Requirements: General | 38 | [38,65]
-3.1 | Contract Initiation Requirements | 38 | [38,38]
-3.2 | End of Contract Transition | 38 | [38,40]
-3.3 | Invoicing | 40 | [40,43]
-3.4 | Liquidated Damages | 43 | [43,43]
-3.5 | Disaster Recovery and Data | 43 | [43,44]
-3.6 | Insurance Requirements | 44 | [44,45]
-3.7 | Security Requirements | 45 | [45,52]
-3.8 | Problem Escalation Procedure | 52 | [52,53]
-3.9 | SOC 2 Type 2 Audit Report | 53 | [53,54]
-3.10 | Experience and Personnel | 54 | [54,60]
-3.11 | Substitution of Personnel | 60 | [60,62]
-3.12 | Minority Business Enterprise (MBE) Reports | 62 | [62,63]
-3.13 | Veteran Small Business Enterprise (VSBE) Reports | 63 | [63,64]
-3.14 | Task Orders | 64 | [64,65]
-3.15 | Additional Clauses | 65 | [65,65]
-4 | Procurement Instructions | 67 | [67,81]
-4.1 | Pre-Proposal Conference | 67 | [67,67]
-4.2 | eMaryland Marketplace Advantage (eMMA) | 67 | [67,67]
-4.3 | Questions | 67 | [67,68]
-4.4 | Procurement Method | 68 | [68,68]
-4.5 | Proposal Due (Closing) Date and Time | 68 | [68,68]
-4.6 | Multiple or Alternate Proposals | 68 | [68,68]
-4.7 | Economy of Preparation | 68 | [68,68]
-4.8 | Public Information Act Notice | 68 | [68,69]
-4.9 | Award Basis | 69 | [69,69]
-4.10 | Oral Presentation | 69 | [69,69]
-4.11 | Duration of Proposal | 69 | [69,69]
-4.12 | Revisions to the RFP | 69 | [69,69]
-4.13 | Cancellations | 69 | [69,70]
-4.14 | Incurred Expenses | 70 | [70,70]
-4.15 | Protest/Disputes | 70 | [70,70]
-4.16 | Offeror Responsibilities | 70 | [70,70]
-4.17 | Acceptance of Terms and Conditions | 70 | [70,71]
-4.18 | Proposal Affidavit | 71 | [71,71]
-4.19 | Contract Affidavit | 71 | [71,71]
-4.20 | Compliance with Laws/Arrearages | 71 | [71,71]
-4.21 | Verification of Registration and Tax Payment | 71 | [71,71]
-4.22 | False Statements | 71 | [71,71]
-4.23 | Payments by Electronic Funds Transfer | 71 | [71,72]
-4.24 | Prompt Payment Policy | 72 | [72,72]
-4.25 | Electronic Procurements Authorized | 72 | [72,73]
-4.26 | MBE Participation Goal | 73 | [73,76]
-4.27 | VSBE Goal | 76 | [76,77]
-4.28 | Living Wage Requirements | 77 | [77,79]
-4.29 | Federal Funding Acknowledgement | 79 | [79,79]
-4.30 | Conflict of Interest Affidavit and Disclosure | 79 | [79,79]
-4.31 | Non-Disclosure Agreement | 79 | [79,80]
-4.32 | HIPAA - Business Associate Agreement | 80 | [80,80]
-4.33 | Nonvisual Access | 80 | [80,81]
-4.34 | Mercury and Products That Contain Mercury | 81 | [81,81]
-4.35 | Location of the Performance of Services Disclosure | 81 | [81,81]
-4.36 | Department of Human Services (DHS) Hiring Agreement | 81 | [81,81]
-4.37 | Small Business Reserve (SBR) Procurement | 81 | [81,81]
-4.38 | Maryland Healthy Working Families Act Requirements | 81 | [81,81]
-5 | Proposal Format | 82 | [82,94]
-5.1 | Two Part Submission | 82 | [82,82]
-5.2 | Proposal Delivery and Packaging | 82 | [82,82]
-5.3 | Volume I - Technical Proposal | 82 | [82,91]
-5.4 | Volume II - Financial Proposal | 91 | [91,91]
-6 | Evaluation and Selection Process | 92 | [92,94]
-6.1 | Evaluation Committee | 92 | [92,92]
-6.2 | Technical Proposal Evaluation Criteria | 92 | [92,92]
-6.3 | Financial Proposal Evaluation Criteria | 92 | [92,92]
-6.4 | Reciprocal Preference | 92 | [92,93]
-6.5 | Selection Procedures | 93 | [93,94]
-6.6 | Documents Required upon Notice of Recommendation for Contract Award | 94 | [94,94]
-7 | RFP ATTACHMENTS AND APPENDICES | 95 | [95,162]
-Attachment A | Pre-Proposal Conference Response Form | 99 | [99,99]
-Attachment B | Financial Proposal Instructions & Form | 100 | [100,102]
-Attachment C | Proposal Affidavit | 102 | [102,103]
-Attachment D | Minority Business Enterprise (MBE) Forms | 103 | [103,104]
-Attachment E | Veteran-Owned Small Business Enterprise (VSBE) Forms | 104 | [104,105]
-Attachment F | Maryland Living Wage Affidavit of Agreement for Service Contracts | 105 | [105,107]
-Attachment G | Federal Funds Attachments | 107 | [107,108]
-Attachment H | Conflict of Interest Affidavit and Disclosure | 108 | [108,109]
-Attachment I | Non-Disclosure Agreement (Contractor) | 109 | [109,110]
-Attachment J | HIPAA Business Associate Agreement | 110 | [110,111]
-Attachment K | Mercury Affidavit | 111 | [111,112]
-Attachment L | Location of the Performance of Services Disclosure | 112 | [112,113]
-Attachment M | Contract | 113 | [113,134]
-Attachment N | Contract Affidavit | 134 | [134,135]
-Attachment O | DHS Hiring Agreement | 135 | [135,136]
-Appendix 1 | Abbreviations and Definitions | 136 | [136,140]
-Appendix 2 | Offeror Information Sheet | 140 | [140,141]
-Appendix 3 | Administrations Program Overview | 141 | [141,153]
-Appendix 4 | DHS Customer Service Center Volume Historical Data Sample | 153 | [153,154]
-Appendix 5 | DHS IT Systems | 154 | [154,156]
-Appendix 6 | Criminal Background Check Affidavit | 156 | [156,157]
-Appendix 7 | Annual Internal Revenue Service (IRS) Employee Awareness Acknowledgement | 157 | [157,159]
-Appendix 8 | Historical Email Support & Documentation Fulfillment | 159 | [159,162]
-"""
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+from azure.storage.filedatalake import (
+    DataLakeServiceClient,
+    DataLakeDirectoryClient,
+    FileSystemClient
+)
+from azure.identity import DefaultAzureCredential
+import os
+
+from azure.identity import DefaultAzureCredential, ClientSecretCredential
+
 
 form_recognizer_endpoint = os.getenv("FORM_RECOGNIZER_ENDPOINT")
 form_recognizer_key = os.getenv("FORM_RECOGNIZER_KEY")
 print("Form Recognizer Endpoint: ", form_recognizer_endpoint)
 print("Form Recognizer Key: ", form_recognizer_key)
 
-# RDC - Added these environment variables to store the Azure Blob Storage connection string and container name
-AZURE_CONNECTION_STRING = os.getenv("RFP_STORAGE_CONNECTION_STRING")
-AZURE_CONTAINER_NAME = os.getenv("RFP_AZURE_CONTAINER_NAME")
 
+connect_str = os.getenv("STORAGE_ACCOUNT_CONNECTION_STRING")
+container_name = os.getenv("STORAGE_ACCOUNT_CONTAINER")
+storage_account_name = os.getenv("STORAGE_ACCOUNT_NAME")
 
-# RDC Initialize the BlobServiceClient to be used in the upload_file_to_blob function
-blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
-container_client = blob_service_client.get_container_client(AZURE_CONTAINER_NAME)
 
 eventstreamConnectionString = os.getenv("EVENTSTREAM_CONNECTION_STRING")
 
@@ -152,6 +61,12 @@ aoai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 print("Azure OpenAI Deployment: ", aoai_deployment)
 print("Azure OpenAI Key: ", aoai_key)
 print("Azure OpenAI Endpoint: ", aoai_endpoint)
+
+COSMOS_HOST = os.getenv("COSMOS_HOST")
+COSMOS_MASTER_KEY = os.getenv("COSMOS_MASTER_KEY")
+COSMOS_DATABASE_ID = os.getenv("COSMOS_DATABASE_ID")
+COSMOS_CONTAINER_ID = os.getenv("COSMOS_CONTAINER_ID")
+
 
 primary_llm = AzureChatOpenAI(
             azure_deployment=aoai_deployment,
@@ -176,8 +91,115 @@ primary_llm_json = AzureChatOpenAI(
                 model_kwargs={"response_format": {"type": "json_object"}}
         )
 
-log_file = "D:/temp/conduent/log_de.txt"
 
+def write_to_fabric(filename):
+
+
+    print(f'Attempting to upload {filename} to fabric...')
+    # Set your account, workspace, and item path here
+
+    
+
+    credential = ClientSecretCredential(
+
+        tenant_id=os.getenv('TENANT_ID'),
+
+        client_id=os.getenv('CLIENT_ID'),
+
+        client_secret=os.getenv('CLIENT_SECRET')
+
+        )
+
+    LOCAL_PATH = "D:/temp/data/"
+    LOCAL_PATH_DATA = LOCAL_PATH + "data_files/"
+    LOCAL_PATH_METADATA = LOCAL_PATH + "metadata/"
+    SERIES_FILE = LOCAL_PATH + "config/fred_series_ids.txt"
+    WORKSPACE_NAME = "dangiannone-dev"
+    LAKEHOUSE_PATH = "djg_lakehouse.Lakehouse/Files/fred/"
+    LAKEHOUSE_PATH_METADATA = "djg_lakehouse.Lakehouse/Files/metadata/"
+    ACCOUNT_NAME = "onelake"
+
+    workspace = "dangiannone-dev"
+    lakehouse = "djg_lakehouse"
+
+    files_directory = 'rfp'
+
+    # service_client = DataLakeServiceClient(account_url='https://onelake.dfs.fabric.microsoft.com/', credential=credential)
+    # file_system_client = service_client.get_file_system_client(file_system = workspace)
+
+    # paths = file_system_client.get_paths(path=f'{lakehouse}.Lakehouse/Files/{files_directory}')
+    
+    # for path in paths:
+    #     print(path.name)
+
+    #abfss://345ac8dd-4538-458f-ad26-3e04ac2794a8@daily-onelake.dfs.fabric.microsoft.com/b46760c3-c6fa-483e-989d-8291e2a57c90/Files
+
+    account_url = f"https://{ACCOUNT_NAME}.dfs.fabric.microsoft.com"
+    token_credential = DefaultAzureCredential()
+
+    # service_client = DataLakeServiceClient(account_url="{}://{}.dfs.fabric.microsoft.com".format("https", ACCOUNT_NAME), credential=token_credential)
+
+    # file_system_client = service_client.get_file_system_client(WORKSPACE_NAME)
+    # paths = file_system_client.get_paths(lakehouse_path)
+
+    # for path in paths:
+    #      print(path.name + '\n')
+
+    # #with open(LOCAL_FILE, "rb") as local_file:
+
+    # #Read file contents into a variable
+
+    # #print(series_data)
+
+    # file_system_client.create_file(lakehouse_path + file_name)
+    # file_client = file_system_client.get_file_client(lakehouse_path + file_name)
+        
+    # file_client.append_data(data=series_data, offset=0, length=len(series_data))
+    # file_client.flush_data(len(series_data))
+
+
+
+def upload_file_to_blob(file_obj):
+    """
+    Uploads a file to Azure Blob Storage
+    Inputs:
+    - file_obj: the file object to upload
+    - connect_str: the connection string for Azure Blob Storage
+    - container_name: the name of the container in Azure Blob Storage
+    - storage_account_name: the name of the storage account
+    """
+    
+    # Create the BlobServiceClient object
+    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+
+    # Create a container client
+    container_client = blob_service_client.get_container_client(container_name)
+
+    # Extract the file name from the file object
+    file_name = file_obj.filename
+
+
+
+    # Create blob client
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=file_name)
+    # Create a blob client using the file name as the blob name
+    blob_client = container_client.get_blob_client(file_obj.filename)
+
+    if blob_client.exists():
+        print(f"Blob {file_name} already exists in {container_name}.")
+        # Handle the case where the blob exists (e.g., skip, overwrite, or prompt the user)
+        # For this example, we'll skip the upload
+        return {"message": f"File {file_name} already exists in Azure Blob Storage"}
+    # Upload the file
+    blob_client.upload_blob(file_obj.read(), overwrite=True)
+
+        
+
+    # Upload the file
+    #blob_client.upload_blob(file_obj.stream, overwrite=True)
+
+    print(f"File {file_name} uploaded to {storage_account_name}/{container_name}/{file_name}")
+    return {"message": f"File {file_obj.filename} uploaded successfully to Azure Blob Storage"}
 
 
 def write_to_eventstream(event_data):
@@ -334,22 +356,10 @@ def upload_to_cosmos(filename, content_dict, table_of_contents):
     write_to_cosmos(container, toc_json)
     print("Loading table of contents to Cosmos...")
 
-################
 
-def read_pdf(input_file):  
-        """
-        Function to read the PDF file using Azure Document Intelligence
-        Input: input_file - the document
-        Output: result - the result object from Azure Document Intelligence
-        """
-        with open(input_file, "rb") as f:  
-            poller = document_analysis_client.begin_analyze_document("prebuilt-layout", f)  
-        result = poller.result()  
-        print("Successfully read the RFP")
-        return result
-    
+
 # RDC - Refactor to use blob storage
-def read_pdf2(input_file):  
+def read_pdf(input_file):  
         """
         Function to read the PDF file from Azure Blob Storage and analyze it using Azure Document Intelligence
         Input:
@@ -357,14 +367,17 @@ def read_pdf2(input_file):
         Output:
         - result: The result object from Azure Document Intelligence
         """
-        AZURE_STORAGE_ACCOUNT = os.getenv("RFP_STORAGE_ACCOUNT2")   
+        
         # we need to use the document_analysis_client.begin_analyze_document_from_url method to read the PDF from blob storage
-        blob_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/{AZURE_CONTAINER_NAME}/{input_file}"
-        blob_url2 = "https://stgrfpdemo.blob.core.windows.net/rfp/MD_RFP_SUBSET%201.pdf"
-        poller = document_analysis_client.begin_analyze_document_from_url(model_id="prebuilt-layout", document_url=input_file)
+        blob_url = f"https://{storage_account_name}.blob.core.windows.net/{container_name}/{input_file}"
+
+        # blob_url2 = "https://stgrfpdemo.blob.core.windows.net/rfp/MD_RFP_SUBSET%201.pdf"
+        # poller = document_analysis_client.begin_analyze_document_from_url(model_id="prebuilt-layout", document_url=input_file)
         
-        # poller = document_analysis_client.begin_analyze_document("prebuilt-layout",AnalyzeDocumentRequest(url_source=blob_url))       
+        # poller = document_analysis_client.begin_analyze_document("prebuilt-layout", AnalyzeDocumentRequest(url_source=blob_url))       
         
+        poller = document_analysis_client.begin_analyze_document_from_url("prebuilt-layout", blob_url)  
+
         result = poller.result()
         print("Successfully read the PDF from blob storage and analyzed.")
         return result
@@ -502,16 +515,16 @@ def populate_sections(adi_result_object, content_dict):
         return content_dict
 
 
-def process_rfp(file):
+def upload_rfp(file):
 
     #Extract the root filename from input_file and remove extension
     print("process_rfp() - Processing file: ", file)
     
-    filename = os.path.splitext(os.path.basename(file))[0]
-    print("Filename: ", filename)
+    upload_file_to_blob(file)
 
+    #write_to_fabric(file)
 
-    adi_result_object = read_pdf(file)
+    adi_result_object = read_pdf(file.filename)
 
     table_of_contents = md_toc
     #table_of_contents = get_table_of_contents(adi_result_object)
@@ -521,45 +534,21 @@ def process_rfp(file):
     content_dict = populate_sections(adi_result_object, content_dict)
     
 
-    upload_to_cosmos(filename, content_dict, table_of_contents) 
+    upload_to_cosmos(file.filename, content_dict, table_of_contents) 
 
     return
 
-# RDC - Refactor to use blob storage
-def process_rfp2(file):
-
-    #Extract the root filename from input_file and remove extension
-    print("process_rfp() - Processing file: ", file)
-    
-    print("Filename: ", file)
-
-    #Create new RFP class instance 
-    #rfp = RFP(input_file)
-
-    adi_result_object = read_pdf2(file)
-
-    #table_of_contents = de_toc
-    table_of_contents = get_table_of_contents(adi_result_object)
-
-    content_dict = set_valid_sections(adi_result_object, table_of_contents)
- 
-    content_dict = populate_sections(adi_result_object, content_dict)
-    
- 
-    upload_to_cosmos(file, content_dict, table_of_contents) 
-
-    return
 
 
 
 if __name__ == "__main__":
     
 
-    input_file = "C:/temp/data/MD_RFP_SUBSET2.pdf"
+    input_file = "C:/temp/data/MD_RFP_SUBSET4.pdf"
     input_blob = "https://stgrfpdemo.blob.core.windows.net/rfp/MD_RFP_SUBSET_1.pdf"
     
     
-    process_rfp(input_file)
+    upload_rfp(input_file)
 
 
 
