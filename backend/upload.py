@@ -31,7 +31,15 @@ from azure.storage.filedatalake import (
     FileSystemClient
 )
 
+from flask import jsonify
+from werkzeug.utils import secure_filename
+import concurrent.futures
+import logging
+import io
 
+
+# Create a ThreadPoolExecutor
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
 load_dotenv()
 
@@ -513,41 +521,93 @@ def populate_sections(adi_result_object, content_dict):
         return content_dict
 
 
-def upload_rfp(file):
 
+def upload_rfp(file_content, original_filename):
     try:
-        #Extract the root filename from input_file and remove extension
-        print("process_rfp() - Processing file: ", file)
-        add_in_progress_upload(file.filename)
+        print(f"Starting to process file: {original_filename}")
+        add_in_progress_upload(original_filename)
+
+        # Create a BytesIO object for blob storage upload
+        blob_file = io.BytesIO(file_content)
         
-        upload_file_to_blob(file)
+        # Upload to blob storage
+        upload_file_to_blob(blob_file, original_filename)
+        print("File uploaded to blob storage")
 
-        #write_to_fabric(file)
+        # Process the file
+        print("Reading PDF")
+        #pdf_file = io.BytesIO(file_content)
+        adi_result_object = read_pdf(original_filename)
+        print("PDF read complete")
 
-        adi_result_object = read_pdf(file.filename)
-
-        #table_of_contents = md_toc
+        print("Getting table of contents")
         table_of_contents = get_table_of_contents(adi_result_object)
+        print("Table of contents retrieved")
 
+        print("Setting valid sections")
         content_dict = set_valid_sections(adi_result_object, table_of_contents)
+        print("Valid sections set")
 
+        print("Populating sections")
         content_dict = populate_sections(adi_result_object, content_dict)
-        
+        print("Sections populated")
 
-        upload_to_cosmos(file.filename, content_dict, table_of_contents) 
+        print("Uploading to Cosmos DB")
+        upload_to_cosmos(original_filename, content_dict, table_of_contents) 
+        print("Upload to Cosmos DB complete")
         
-        remove_in_progress_upload(file.filename)
+        remove_in_progress_upload(original_filename)
+        print("In-progress upload removed")
 
     except Exception as e:
-        print(f"Error processing RFP {file.filename}: {str(e)}")
-        set_upload_error(file.filename)
+        print(f"Error processing RFP {original_filename}: {str(e)}")
+        set_upload_error(original_filename)
 
     return
 
 def start_upload_process(file):
-    # Start a background thread for processing
-    threading.Thread(target=upload_rfp, args=(file,)).start()
+    original_filename = secure_filename(file.filename)
+    
+    try:
+        # Read file content
+        file_content = file.read()
+        
+        # Submit the task to the thread pool
+        executor.submit(upload_rfp, file_content, original_filename)
+        
+        return jsonify({"message": "RFP Ingestion process started. This can take anywhere from 2 to 15 minutes."}), 202
+    except Exception as e:
+        print(f"Error starting upload process: {str(e)}")
+        return jsonify({"error": "Failed to start upload process"}), 500
 
+def upload_file_to_blob(file_obj, filename):
+    """
+    Uploads a file to Azure Blob Storage
+    Inputs:
+    - file_obj: BytesIO object containing file content
+    - filename: name of the file in blob storage
+    """
+    print("Entering upload_file_to_blob function")
+    
+    # Create the BlobServiceClient object
+    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+
+    # Create a container client
+    container_client = blob_service_client.get_container_client(container_name)
+
+    # Create blob client
+    blob_client = container_client.get_blob_client(filename)
+
+    if blob_client.exists():
+        print(f"Blob {filename} already exists in {container_name}.")
+        print(f"Overwriting existing blob {filename}")
+
+    # Upload the file
+    file_obj.seek(0)
+    blob_client.upload_blob(file_obj, overwrite=True)
+
+    print(f"File {filename} uploaded to {storage_account_name}/{container_name}/{filename}")
+    return {"message": f"File {filename} uploaded successfully to Azure Blob Storage"}
 
 if __name__ == "__main__":
     

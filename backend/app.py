@@ -40,7 +40,7 @@ def upload_file():
     
     start_upload_process(file)
     
-    return jsonify({"message": "File upload started"}), 202
+    return jsonify({"message": "RFP Ingestion process started. This can take anywhere from 2 to 15 minutes."}), 202
 
 @app.route('/available-rfps', methods=['GET'])
 def get_rfps():
