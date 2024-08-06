@@ -1,12 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Upload } from 'lucide-react';
 
 const App = () => {
   const [activePage, setActivePage] = useState('RFP Upload');
   const [uploadStatus, setUploadStatus] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [availableRFPs, setAvailableRFPs] = useState([]);
+  const [isPolling, setIsPolling] = useState(false);
 
   const pages = ['Main', 'RFP Upload', 'Resume Builder'];
+
+  const fetchRFPs = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:5000/available-rfps');
+      const data = await response.json();
+      setAvailableRFPs(data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching RFPs:', error);
+    }
+  }, []);
+
+  const pollInProgressRFPs = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:5000/in-progress-rfps');
+      const data = await response.json();
+      setAvailableRFPs(prevRFPs => {
+        const updatedRFPs = [...prevRFPs];
+        data.forEach(rfp => {
+          const index = updatedRFPs.findIndex(item => item.name === rfp.name);
+          if (index !== -1) {
+            updatedRFPs[index] = rfp;
+          } else {
+            updatedRFPs.push(rfp);
+          }
+        });
+        return updatedRFPs;
+      });
+      return data.some(rfp => rfp.status === 'Processing');
+    } catch (error) {
+      console.error('Error polling in-progress RFPs:', error);
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRFPs();
+  }, [fetchRFPs]);
+
+  useEffect(() => {
+    let intervalId;
+    if (isPolling) {
+      intervalId = setInterval(async () => {
+        const shouldContinuePolling = await pollInProgressRFPs();
+        if (!shouldContinuePolling) {
+          setIsPolling(false);
+        }
+      }, 5000);
+    }
+    return () => clearInterval(intervalId);
+  }, [isPolling, pollInProgressRFPs]);
 
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
@@ -28,6 +81,7 @@ const App = () => {
 
       if (response.ok) {
         setUploadStatus(`Success: ${data.message}`);
+        setIsPolling(true);
       } else {
         setUploadStatus(`Error: ${data.error}`);
       }
@@ -60,7 +114,7 @@ const App = () => {
         {activePage === 'RFP Upload' && (
           <div className="max-w-md mx-auto">
             <h1 className="text-3xl font-bold mb-8">Upload an RFP</h1>
-            <div className="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center">
+            <div className="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center mb-8">
               <Upload className="mx-auto mb-4" size={48} />
               <p className="mb-4">Drag and drop your RFP file here, or click to select a file</p>
               <input
@@ -83,6 +137,23 @@ const App = () => {
                   {uploadStatus}
                 </p>
               )}
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h2 className="text-xl font-bold mb-4">Available RFPs</h2>
+              <ul>
+                {availableRFPs.map((rfp, index) => (
+                  <li key={index} className="flex justify-between items-center mb-2">
+                    <span>{rfp.name}</span>
+                    <span className={`px-2 py-1 rounded ${
+                      rfp.status === 'Complete' ? 'bg-green-600' : 
+                      rfp.status === 'Processing' ? 'bg-yellow-600' :
+                      'bg-red-600'
+                    }`}>
+                      {rfp.status}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         )}

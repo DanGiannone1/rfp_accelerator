@@ -1,41 +1,39 @@
 
 import os  
 from dotenv import load_dotenv  
-from azure.core.credentials import AzureKeyCredential  
-from azure.ai.formrecognizer import DocumentAnalysisClient, AnalyzeResult 
-from openai import AzureOpenAI  
 import re
 from concurrent.futures import ThreadPoolExecutor
-load_dotenv()
-import azure.cosmos.documents as documents
-import azure.cosmos.cosmos_client as cosmos_client
-import azure.cosmos.exceptions as exceptions
-from azure.cosmos.partition_key import PartitionKey
 import time
-from langchain_openai import AzureChatOpenAI
-from azure.storage.blob import BlobServiceClient
-import os
 from werkzeug.datastructures import FileStorage
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
-from azure.storage.blob import ContentSettings
 from io import BytesIO
 import json
-from azure.eventhub import EventHubProducerClient, EventData   
+import threading
+from global_vars import add_in_progress_upload, remove_in_progress_upload, set_upload_error
+
+from langchain_openai import AzureChatOpenAI
 
 from prompts import *
 from rfp import *
 
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+from azure.core.credentials import AzureKeyCredential  
+from azure.identity import DefaultAzureCredential, ClientSecretCredential
+
+from azure.ai.formrecognizer import DocumentAnalysisClient, AnalyzeResult 
+from azure.eventhub import EventHubProducerClient, EventData   
+import azure.cosmos.documents as documents
+import azure.cosmos.cosmos_client as cosmos_client
+import azure.cosmos.exceptions as exceptions
+from azure.cosmos.partition_key import PartitionKey
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient, ContentSettings
 from azure.storage.filedatalake import (
     DataLakeServiceClient,
     DataLakeDirectoryClient,
     FileSystemClient
 )
-from azure.identity import DefaultAzureCredential
-import os
 
-from azure.identity import DefaultAzureCredential, ClientSecretCredential
 
+
+load_dotenv()
 
 form_recognizer_endpoint = os.getenv("FORM_RECOGNIZER_ENDPOINT")
 form_recognizer_key = os.getenv("FORM_RECOGNIZER_KEY")
@@ -517,28 +515,38 @@ def populate_sections(adi_result_object, content_dict):
 
 def upload_rfp(file):
 
-    #Extract the root filename from input_file and remove extension
-    print("process_rfp() - Processing file: ", file)
-    
-    upload_file_to_blob(file)
+    try:
+        #Extract the root filename from input_file and remove extension
+        print("process_rfp() - Processing file: ", file)
+        add_in_progress_upload(file.filename)
+        
+        upload_file_to_blob(file)
 
-    #write_to_fabric(file)
+        #write_to_fabric(file)
 
-    adi_result_object = read_pdf(file.filename)
+        adi_result_object = read_pdf(file.filename)
 
-    table_of_contents = md_toc
-    #table_of_contents = get_table_of_contents(adi_result_object)
+        #table_of_contents = md_toc
+        table_of_contents = get_table_of_contents(adi_result_object)
 
-    content_dict = set_valid_sections(adi_result_object, table_of_contents)
+        content_dict = set_valid_sections(adi_result_object, table_of_contents)
 
-    content_dict = populate_sections(adi_result_object, content_dict)
-    
+        content_dict = populate_sections(adi_result_object, content_dict)
+        
 
-    upload_to_cosmos(file.filename, content_dict, table_of_contents) 
+        upload_to_cosmos(file.filename, content_dict, table_of_contents) 
+        
+        remove_in_progress_upload(file.filename)
+
+    except Exception as e:
+        print(f"Error processing RFP {file.filename}: {str(e)}")
+        set_upload_error(file.filename)
 
     return
 
-
+def start_upload_process(file):
+    # Start a background thread for processing
+    threading.Thread(target=upload_rfp, args=(file,)).start()
 
 
 if __name__ == "__main__":
