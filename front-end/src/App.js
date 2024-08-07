@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Upload, FileText } from 'lucide-react';
+import RFPListItem from './components/RFPListItem';
 
 const App = () => {
   const [activePage, setActivePage] = useState('RFP Upload');
@@ -55,7 +56,7 @@ const App = () => {
         const shouldContinuePolling = await pollInProgressRFPs();
         if (!shouldContinuePolling) {
           setIsPolling(false);
-          setUploadStatus(''); // Clear the upload status message when polling stops
+          setUploadStatus('');
         }
       }, 5000);
     }
@@ -83,6 +84,10 @@ const App = () => {
       if (response.ok) {
         setUploadStatus(`${data.message}`);
         setIsPolling(true);
+        setAvailableRFPs(prevRFPs => [
+          ...prevRFPs,
+          { name: file.name, status: 'Processing' }
+        ]);
       } else {
         setUploadStatus(`Error: ${data.error}`);
       }
@@ -147,19 +152,7 @@ const App = () => {
               <h2 className="text-2xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Available RFPs</h2>
               <ul className="space-y-2">
                 {availableRFPs.map((rfp, index) => (
-                  <li key={index} className="flex justify-between items-center p-3 bg-gray-700 bg-opacity-50 rounded-lg transition duration-300 hover:bg-opacity-75">
-                    <div className="flex items-center space-x-3">
-                      <FileText className="text-blue-400" size={20} />
-                      <span className="text-gray-200">{rfp.name}</span>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                      rfp.status === 'Complete' ? 'bg-green-500 bg-opacity-20 text-green-300' : 
-                      rfp.status === 'Processing' ? 'bg-yellow-500 bg-opacity-20 text-yellow-300' :
-                      'bg-red-500 bg-opacity-20 text-red-300'
-                    }`}>
-                      {rfp.status === 'Complete' ? 'READY' : rfp.status}
-                    </span>
-                  </li>
+                  <RFPListItem key={index} rfp={rfp} />
                 ))}
               </ul>
             </div>
