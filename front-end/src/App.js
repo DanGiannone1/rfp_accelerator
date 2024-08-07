@@ -1,21 +1,24 @@
 import React, { useState } from 'react';
 import Layout from './components/layout/Layout';
+import MainPage from './pages/MainPage';
 import RFPUploadPage from './pages/RFPUploadPage';
 import EmployeeMatchingPage from './pages/EmployeeMatchingPage';
 
 const App = () => {
-  const [activePage, setActivePage] = useState('RFP Upload');
+  const [activePage, setActivePage] = useState('Main');
 
-  const pages = ['Main', 'RFP Upload', 'Employee Matching'];
+  const pages = ['Main', 'RFP Upload', 'Employee Matching', 'Analytics'];
 
   const renderActivePage = () => {
     switch (activePage) {
+      case 'Main':
+        return <MainPage setActivePage={setActivePage} />;
       case 'RFP Upload':
         return <RFPUploadPage />;
-      case 'Main':
-        return <div>Main page content goes here</div>;
       case 'Employee Matching':
         return <EmployeeMatchingPage />;
+      case 'Analytics':
+        return <div>Analytics page content goes here</div>;
       default:
         return null;
     }
