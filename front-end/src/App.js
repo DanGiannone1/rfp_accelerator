@@ -3,6 +3,7 @@ import Layout from './components/layout/Layout';
 import MainPage from './pages/MainPage';
 import RFPUploadPage from './pages/RFPUploadPage';
 import EmployeeMatchingPage from './pages/EmployeeMatchingPage';
+import { RFPListProvider } from './components/rfp/RFPListContext';
 
 const App = () => {
   const [activePage, setActivePage] = useState('Main');
@@ -25,9 +26,11 @@ const App = () => {
   };
 
   return (
-    <Layout pages={pages} activePage={activePage} setActivePage={setActivePage}>
-      {renderActivePage()}
-    </Layout>
+    <RFPListProvider>
+      <Layout pages={pages} activePage={activePage} setActivePage={setActivePage}>
+        {renderActivePage()}
+      </Layout>
+    </RFPListProvider>
   );
 };
 

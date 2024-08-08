@@ -1,29 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Upload } from 'lucide-react';
 import RFPListItem from '../components/rfp/RFPListItem';
+import { useRFPList } from '../components/rfp/RFPListContext';
 
 const RFPUploadPage = () => {
   const [uploadStatus, setUploadStatus] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [availableRFPs, setAvailableRFPs] = useState([]);
   const [isPolling, setIsPolling] = useState(false);
-
-  const fetchRFPs = useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost:5000/available-rfps');
-      const data = await response.json();
-      setAvailableRFPs(data);
-      return data;
-    } catch (error) {
-      console.error('Error fetching RFPs:', error);
-    }
-  }, []);
+  const { rfps, setRFPs, isLoading } = useRFPList();
 
   const pollInProgressRFPs = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:5000/in-progress-rfps');
       const data = await response.json();
-      setAvailableRFPs(prevRFPs => {
+      setRFPs(prevRFPs => {
         const updatedRFPs = [...prevRFPs];
         data.forEach(rfp => {
           const index = updatedRFPs.findIndex(item => item.name === rfp.name);
@@ -40,11 +30,7 @@ const RFPUploadPage = () => {
       console.error('Error polling in-progress RFPs:', error);
       return false;
     }
-  }, []);
-
-  useEffect(() => {
-    fetchRFPs();
-  }, [fetchRFPs]);
+  }, [setRFPs]);
 
   useEffect(() => {
     let intervalId;
@@ -82,7 +68,7 @@ const RFPUploadPage = () => {
         setUploadStatus(`${data.message}`);
         setIsPolling(true);
         
-        setAvailableRFPs(prevRFPs => [
+        setRFPs(prevRFPs => [
           ...prevRFPs,
           { name: file.name, status: 'Processing' }
         ]);
@@ -129,11 +115,15 @@ const RFPUploadPage = () => {
       </div>
       <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 shadow-lg">
         <h2 className="text-2xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Available RFPs</h2>
-        <ul className="space-y-2">
-          {availableRFPs.map((rfp, index) => (
-            <RFPListItem key={index} rfp={rfp} />
-          ))}
-        </ul>
+        {isLoading ? (
+          <p className="text-gray-300">Loading RFPs...</p>
+        ) : (
+          <ul className="space-y-2">
+            {rfps.map((rfp, index) => (
+              <RFPListItem key={index} rfp={rfp} />
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
