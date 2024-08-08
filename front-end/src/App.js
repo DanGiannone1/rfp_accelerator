@@ -17,7 +17,7 @@ const App = () => {
       case 'RFP Upload':
         return <RFPUploadPage />;
       case 'Employee Matching':
-        return <EmployeeMatchingPage />;
+          return <EmployeeMatchingPage />;
       case 'Analytics':
         return <div>Analytics page content goes here</div>;
       default:
