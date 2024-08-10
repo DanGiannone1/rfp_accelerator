@@ -1,5 +1,5 @@
 import React from 'react';
-import { Upload, Users, BarChart, FileText, MessageSquare, List } from 'lucide-react';
+import { Upload, Users, FileText, MessageSquare, List } from 'lucide-react';
 
 const FeatureCard = ({ icon: Icon, title, description, onClick }) => (
   <div 

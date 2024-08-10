@@ -14,7 +14,9 @@ files = [
     'front-end/src/components/rfp/RFPListContext.js',
     'front-end/src/components/rfp/RFPListItem.js',
     'front-end/src/components/layout/Layout.js',
-    'front-end/src/components/layout/Sidebar.js'
+    'front-end/src/components/layout/Sidebar.js',
+    'front-end/src/pages/RFPAnalyzerPage.js',
+    'front-end/src/pages/RequirementsExtractionPage.js',
 ]
 
 # Specify the output file path
