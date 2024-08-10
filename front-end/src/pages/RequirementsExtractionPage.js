@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { List } from 'lucide-react';
+import RFPSelector from '../components/rfp/RFPSelector';
 import AgentMode from './AgentMode';
 import CopilotMode from './CopilotMode';
-import ArtifactDownload  from '../components/rfp/ArtifactDownload';
+import ArtifactDownload from '../components/rfp/ArtifactDownload';
 
 // Simple Toggle Component
 const Toggle = ({ checked, onChange, label }) => (
@@ -24,25 +25,33 @@ const Toggle = ({ checked, onChange, label }) => (
 );
 
 const RequirementsExtractionPage = () => {
-  const [isCopilotMode, setIsCopilotMode] = useState(false);
-  const [selectedRFP, setSelectedRFP] = useState(null);
-  const [currentSection, setCurrentSection] = useState(0);
-  const [extractionProgress, setExtractionProgress] = useState(0);
-  const [isExtracting, setIsExtracting] = useState(false);
-
-  // Mock data - replace with actual data from your backend
-  const rfps = [
-    { id: 1, name: 'RFP1' },
-    { id: 2, name: 'RFP2' },
-    { id: 3, name: 'RFP3' },
-  ];
-
-  const mockDownloads = [
-    { name: 'RFP2203_Software_Development_Se...', status: 'READY' },
-    { name: 'dummy_rfp_1.pdf', status: 'READY' },
-    { name: 'dummy_rfp_2.pdf', status: 'READY' },
-    { name: 'dummy_rfp_3.pdf', status: 'READY' },
-  ];
+    const [isCopilotMode, setIsCopilotMode] = useState(false);
+    const [selectedRFP, setSelectedRFP] = useState(null);
+    const [currentSection, setCurrentSection] = useState(0);
+    const [extractionProgress, setExtractionProgress] = useState(0);
+    const [isExtracting, setIsExtracting] = useState(false);
+    const [artifacts, setArtifacts] = useState([]);
+  
+    useEffect(() => {  
+        fetchArtifacts();  
+      }, []);  
+  
+    const fetchArtifacts = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/artifacts?rfp=${selectedRFP}&type=requirements`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch artifacts');
+        }
+        const data = await response.json();
+        setArtifacts(data.map(artifact => ({
+          name: artifact.name,
+          status: artifact.status || 'READY' // Assuming 'READY' as default status
+        })));
+      } catch (error) {
+        console.error('Error fetching artifacts:', error);
+        // Optionally set an error state or show a notification to the user
+      }
+    };
 
   const mockSections = [
     { 
@@ -55,8 +64,8 @@ const RequirementsExtractionPage = () => {
     // ... more sections
   ];
 
-  const handleRFPSelect = (rfpId) => {
-    setSelectedRFP(rfpId);
+  const handleRFPSelect = (rfpName) => {
+    setSelectedRFP(rfpName);
     setCurrentSection(0);
     setExtractionProgress(0);
     // Here you would start the extraction process
@@ -69,6 +78,10 @@ const RequirementsExtractionPage = () => {
   };
 
   const handleStartExtraction = () => {
+    if (!selectedRFP) {
+      alert("Please select an RFP before starting the extraction process.");
+      return;
+    }
     setIsExtracting(true);
     // Simulate extraction process
     let progress = 0;
@@ -97,32 +110,18 @@ const RequirementsExtractionPage = () => {
       </div>
 
       <div className="flex flex-1 px-4 pb-16">
-        {/* Left sidebar */}
-        <div className="w-64 pr-4">
+        <div className="w-64 pr-4 flex flex-col space-y-4">
           <Toggle
             checked={isCopilotMode}
             onChange={setIsCopilotMode}
             label="Copilot Mode"
           />
+          <RFPSelector
+            selectedRFPs={selectedRFP}
+            onSelectRFP={handleRFPSelect}
+            multiSelect={false}
+          />
           <div className="bg-gray-800 bg-opacity-50 rounded-xl p-4 shadow-lg">
-            <h2 className="text-xl font-semibold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-              Select RFP
-            </h2>
-            <div className="space-y-2">
-              {rfps.map(rfp => (
-                <button
-                  key={rfp.id}
-                  onClick={() => handleRFPSelect(rfp.id)}
-                  className={`w-full text-left py-2 px-4 rounded-lg transition duration-300 ${
-                    selectedRFP === rfp.id ? 'bg-blue-600' : 'bg-gray-700 bg-opacity-50 hover:bg-opacity-75'
-                  }`}
-                >
-                  {rfp.name}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4 bg-gray-800 bg-opacity-50 rounded-xl p-4 shadow-lg">
             <h3 className="text-lg font-semibold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
               Extraction Progress
             </h3>
@@ -136,7 +135,6 @@ const RequirementsExtractionPage = () => {
           </div>
         </div>
 
-        {/* Main content area */}
         <div className="flex-1 px-4 flex flex-col">
           <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 shadow-lg flex-1 flex flex-col">
             {isCopilotMode ? (
@@ -156,7 +154,7 @@ const RequirementsExtractionPage = () => {
           </div>
         </div>
 
-        <ArtifactDownload downloads={mockDownloads} />
+        <ArtifactDownload downloads={artifacts} />
       </div>
     </div>
   );

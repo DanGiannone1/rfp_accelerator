@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, FileText, Loader } from 'lucide-react';
+import { MessageSquare, Send, Loader } from 'lucide-react';
 import { useRFPList } from '../components/rfp/RFPListContext';
 import ReactMarkdown from 'react-markdown';
+import RFPSelector from '../components/rfp/RFPSelector';
 
 const RFPAnalyzerPage = () => {
   const [selectedRFP, setSelectedRFP] = useState(null);
@@ -100,27 +101,11 @@ const RFPAnalyzerPage = () => {
       </div>
       <div className="flex flex-1 px-4 pb-16 overflow-hidden">
         <div className="w-64 pr-4 flex flex-col">
-          <div className="bg-gray-800 bg-opacity-60 rounded-xl p-4 shadow-lg flex flex-col h-full border border-gray-700">
-            <h2 className="text-xl font-semibold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-              Select RFP
-            </h2>
-            <div className="space-y-2 overflow-y-auto flex-grow">
-              {rfps.map(rfp => (
-                <button
-                  key={rfp.name}
-                  onClick={() => handleRFPSelect(rfp.name)}
-                  className={`w-full text-left py-2 px-4 rounded-lg transition duration-300 flex items-center ${
-                    selectedRFP === rfp.name 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-700 bg-opacity-40 hover:bg-opacity-60 text-gray-300 hover:text-white'
-                  }`}
-                >
-                  <FileText size={16} className="mr-2 flex-shrink-0" />
-                  <span className="truncate">{rfp.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+        <RFPSelector
+            selectedRFPs={selectedRFP}
+            onSelectRFP={handleRFPSelect}
+            multiSelect={false}
+        />
         </div>
 
         <div className="flex-1 flex flex-col bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl shadow-lg overflow-hidden border border-gray-700">

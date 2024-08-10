@@ -295,5 +295,32 @@ def run():
     return Response(run_interaction_test(user_message), mimetype='text/event-stream')
 
 
+ARTIFACTS_DATA = [  
+    {'rfp': '123', 'name': 'Artifact 1', 'status': 'READY', 'type': 'requirements'},  
+    {'rfp': '123', 'name': 'Artifact 2', 'status': 'IN_PROGRESS', 'type': 'requirements'},  
+    {'rfp': '456', 'name': 'Artifact A', 'status': 'READY', 'type': 'requirements'},  
+    {'rfp': '456', 'name': 'Artifact B', 'status': 'READY', 'type': 'requirements'},  
+]  
+  
+@app.route('/artifacts', methods=['GET'])  
+def get_artifacts():  
+    rfp = request.args.get('rfp')  
+    artifact_type = request.args.get('type')
+    print(rfp)
+    print(artifact_type)  
+  
+    if not rfp or not artifact_type:  
+        return jsonify({'error': 'Missing required parameters'}), 400  
+  
+    artifacts = [
+        {'name': 'Artifact 1', 'status': 'READY'},
+        {'name': 'Artifact 2', 'status': 'READY'},
+        {'name': 'Artifact 3', 'status': 'READY'}
+    ]
+  
+    print(artifacts)
+    return jsonify(artifacts), 200
+
+
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)
