@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { List, CheckCircle, AlertCircle, Download } from 'lucide-react';
+import { List } from 'lucide-react';
+import AgentMode from './AgentMode';
+import CopilotMode from './CopilotMode';
+import ArtifactDownload  from '../components/rfp/ArtifactDownload';
 
+// Simple Toggle Component
 const Toggle = ({ checked, onChange, label }) => (
   <div className="flex items-center justify-center mb-4">
     <span className="mr-2 text-gray-300 text-sm">{label}</span>
@@ -136,90 +140,23 @@ const RequirementsExtractionPage = () => {
         <div className="flex-1 px-4 flex flex-col">
           <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 shadow-lg flex-1 flex flex-col">
             {isCopilotMode ? (
-              <>
-                <h2 className="text-2xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-                  Section Review
-                </h2>
-                <div className="flex-1 flex">
-                  <div className="w-1/2 pr-2">
-                    <h3 className="text-xl font-semibold mb-2 text-blue-400">Original Text</h3>
-                    <div className="bg-gray-700 bg-opacity-50 p-4 rounded-lg h-64 overflow-y-auto">
-                      {selectedRFP ? mockSections[currentSection].original : "Select an RFP to start"}
-                    </div>
-                  </div>
-                  <div className="w-1/2 pl-2">
-                    <h3 className="text-xl font-semibold mb-2 text-purple-400">Extracted Requirements</h3>
-                    <div className="bg-gray-700 bg-opacity-50 p-4 rounded-lg h-64 overflow-y-auto">
-                      {selectedRFP ? (
-                        mockSections[currentSection].extracted.map((req, index) => (
-                          <div key={index} className="flex items-center mb-2">
-                            <span className="flex-grow">{req.requirement}</span>
-                            {req.confidence > 0.8 ? (
-                              <CheckCircle className="text-green-500 ml-2" size={20} />
-                            ) : (
-                              <AlertCircle className="text-yellow-500 ml-2" size={20} />
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        "Select an RFP to view extracted requirements"
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {selectedRFP && (
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={handleApproveSection}
-                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-                    >
-                      Approve and Continue
-                    </button>
-                  </div>
-                )}
-              </>
+              <CopilotMode 
+                selectedRFP={selectedRFP}
+                currentSection={currentSection}
+                mockSections={mockSections}
+                onApproveSection={handleApproveSection}
+              />
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center">
-                <p className="text-gray-300 mb-4">
-                  The AI agent will automatically extract requirements from all sections.
-                </p>
-                {!isExtracting ? (
-                  <button
-                    onClick={handleStartExtraction}
-                    className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-2 px-6 rounded-full transition duration-300"
-                    disabled={!selectedRFP}
-                  >
-                    {selectedRFP ? "Start Extraction" : "Select an RFP to start"}
-                  </button>
-                ) : (
-                  <p className="text-yellow-400">Extraction in progress...</p>
-                )}
-              </div>
+              <AgentMode 
+                selectedRFP={selectedRFP}
+                isExtracting={isExtracting}
+                onStartExtraction={handleStartExtraction}
+              />
             )}
           </div>
         </div>
 
-        {/* Right sidebar */}
-        <div className="w-64 pl-4">
-          <div className="bg-gray-800 bg-opacity-50 rounded-xl p-4 shadow-lg">
-            <h2 className="text-xl font-semibold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-              Downloads
-            </h2>
-            <div className="space-y-2">
-              {mockDownloads.map((download, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-gray-700 bg-opacity-50 rounded-lg">
-                  <span className="text-sm text-gray-300 truncate mr-2">{download.name}</span>
-                  <div className="flex items-center">
-                    <span className="text-xs font-semibold bg-green-500 bg-opacity-20 text-green-300 px-2 py-1 rounded-full mr-2">
-                      {download.status}
-                    </span>
-                    <Download className="text-blue-400 cursor-pointer" size={16} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <ArtifactDownload downloads={mockDownloads} />
       </div>
     </div>
   );
