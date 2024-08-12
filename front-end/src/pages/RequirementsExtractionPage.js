@@ -24,6 +24,17 @@ const Toggle = ({ checked, onChange, label }) => (
   </div>
 );
 
+const EnhancedProgressBar = ({ progress }) => (
+  <div className="w-full bg-gray-700 rounded-full h-2.5 mb-4 overflow-hidden">
+    <div 
+      className="bg-blue-600 h-full rounded-full transition-all duration-500 ease-out relative"
+      style={{ width: `${progress}%` }}
+    >
+      <div className="absolute top-0 right-0 bottom-0 left-0 bg-blue-400 animate-pulse opacity-75 rounded-full" />
+    </div>
+  </div>
+);
+
 const RequirementsExtractionPage = () => {
     const [isCopilotMode, setIsCopilotMode] = useState(false);
     const [selectedRFP, setSelectedRFP] = useState(null);
@@ -31,12 +42,15 @@ const RequirementsExtractionPage = () => {
     const [extractionProgress, setExtractionProgress] = useState(0);
     const [isExtracting, setIsExtracting] = useState(false);
     const [artifacts, setArtifacts] = useState([]);
+    const [extractionMessage, setExtractionMessage] = useState('');
   
     useEffect(() => {  
         fetchArtifacts();  
-      }, []);  
+    }, [selectedRFP]);  
   
     const fetchArtifacts = async () => {
+      if (!selectedRFP) return;
+      
       try {
         const response = await fetch(`http://localhost:5000/artifacts?rfp=${selectedRFP}&type=requirements`);
         if (!response.ok) {
@@ -53,111 +67,118 @@ const RequirementsExtractionPage = () => {
       }
     };
 
-  const mockSections = [
-    { 
-      original: "Section 1 text...",
-      extracted: [
-        { requirement: "Requirement 1", confidence: 0.9 },
-        { requirement: "Requirement 2", confidence: 0.7 },
-      ]
-    },
-    // ... more sections
-  ];
+    const mockSections = [
+      { 
+        original: "Section 1 text...",
+        extracted: [
+          { requirement: "Requirement 1", confidence: 0.9 },
+          { requirement: "Requirement 2", confidence: 0.7 },
+        ]
+      },
+      // ... more sections
+    ];
 
-  const handleRFPSelect = (rfpName) => {
-    setSelectedRFP(rfpName);
-    setCurrentSection(0);
-    setExtractionProgress(0);
-    // Here you would start the extraction process
-  };
+    const handleRFPSelect = (rfpName) => {
+      setSelectedRFP(rfpName);
+      setCurrentSection(0);
+      setExtractionProgress(0);
+      setExtractionMessage('');
+      // Here you would reset any other relevant state
+    };
 
-  const handleApproveSection = () => {
-    // Here you would save the approved section to the database
-    setCurrentSection(currentSection + 1);
-    setExtractionProgress(((currentSection + 1) / mockSections.length) * 100);
-  };
+    const handleApproveSection = () => {
+      // Here you would save the approved section to the database
+      setCurrentSection(currentSection + 1);
+      setExtractionProgress(((currentSection + 1) / mockSections.length) * 100);
+    };
 
-  const handleStartExtraction = () => {
-    if (!selectedRFP) {
-      alert("Please select an RFP before starting the extraction process.");
-      return;
-    }
-    setIsExtracting(true);
-    // Simulate extraction process
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setExtractionProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
+    const handleStartExtraction = async () => {
+      if (!selectedRFP) {
+        alert("Please select an RFP before starting the extraction process.");
+        return;
+      }
+    
+      setIsExtracting(true);
+      setExtractionMessage('Starting extraction process...');
+      try {
+        const response = await fetch('http://localhost:5000/start-extraction', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ selected_rfp: selectedRFP }),
+        });
+
+        const data = await response.json();
+        setExtractionMessage(data.message);
+        // Start polling for progress updates here
+      } catch (error) {
+        console.error('Error starting extraction:', error);
+        setExtractionMessage('An error occurred while starting the extraction process.');
         setIsExtracting(false);
       }
-    }, 500);
-  };
+    };
 
-  return (
-    <div className="flex flex-col h-full pt-4">
-      <div className="text-center mb-8">
-        <div className="flex justify-center items-center mb-2">
-          <List className="text-blue-400 mr-2" size={36} />
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-            Requirements Extraction
-          </h1>
+    return (
+      <div className="flex flex-col h-full pt-4">
+        <div className="text-center mb-8">
+          <div className="flex justify-center items-center mb-2">
+            <List className="text-blue-400 mr-2" size={36} />
+            <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
+              Requirements Extraction
+            </h1>
+          </div>
+          <p className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-purple-400">
+            Extract and review RFP requirements
+          </p>
         </div>
-        <p className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-purple-400">
-          Extract and review RFP requirements
-        </p>
-      </div>
 
-      <div className="flex flex-1 px-4 pb-16">
-        <div className="w-64 pr-4 flex flex-col space-y-4">
-          <Toggle
-            checked={isCopilotMode}
-            onChange={setIsCopilotMode}
-            label="Copilot Mode"
-          />
-          <RFPSelector
-            selectedRFPs={selectedRFP}
-            onSelectRFP={handleRFPSelect}
-            multiSelect={false}
-          />
-          <div className="bg-gray-800 bg-opacity-50 rounded-xl p-4 shadow-lg">
-            <h3 className="text-lg font-semibold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-              Extraction Progress
-            </h3>
-            <div className="w-full bg-gray-700 rounded-full h-2.5 mb-4">
-              <div 
-                className="bg-blue-600 h-2.5 rounded-full" 
-                style={{ width: `${extractionProgress}%` }}
-              ></div>
+        <div className="flex flex-1 px-4 pb-16">
+          <div className="w-64 pr-4 flex flex-col space-y-4">
+            <Toggle
+              checked={isCopilotMode}
+              onChange={setIsCopilotMode}
+              label="Copilot Mode"
+            />
+            <RFPSelector
+              selectedRFPs={selectedRFP}
+              onSelectRFP={handleRFPSelect}
+              multiSelect={false}
+            />
+            <div className="bg-gray-800 bg-opacity-50 rounded-xl p-4 shadow-lg">
+              <h3 className="text-lg font-semibold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
+                Extraction Progress
+              </h3>
+              <EnhancedProgressBar progress={extractionProgress} />
+              <p className="text-gray-300">{Math.round(extractionProgress)}% Complete</p>
             </div>
-            <p className="text-gray-300">{Math.round(extractionProgress)}% Complete</p>
           </div>
-        </div>
 
-        <div className="flex-1 px-4 flex flex-col">
-          <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 shadow-lg flex-1 flex flex-col">
-            {isCopilotMode ? (
-              <CopilotMode 
-                selectedRFP={selectedRFP}
-                currentSection={currentSection}
-                mockSections={mockSections}
-                onApproveSection={handleApproveSection}
-              />
-            ) : (
-              <AgentMode 
-                selectedRFP={selectedRFP}
-                isExtracting={isExtracting}
-                onStartExtraction={handleStartExtraction}
-              />
-            )}
+          <div className="flex-1 px-4 flex flex-col">
+            <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 shadow-lg flex-1 flex flex-col">
+              {isCopilotMode ? (
+                <CopilotMode 
+                  selectedRFP={selectedRFP}
+                  currentSection={currentSection}
+                  mockSections={mockSections}
+                  onApproveSection={handleApproveSection}
+                />
+              ) : (
+                <AgentMode 
+                  selectedRFP={selectedRFP}
+                  isExtracting={isExtracting}
+                  onStartExtraction={handleStartExtraction}
+                  extractionMessage={extractionMessage}
+                  extractionProgress={extractionProgress}
+                />
+              )}
+            </div>
           </div>
-        </div>
 
-        <ArtifactDownload downloads={artifacts} />
+          <ArtifactDownload downloads={artifacts} />
+        </div>
       </div>
-    </div>
-  );
+    );
 };
 
 export default RequirementsExtractionPage;

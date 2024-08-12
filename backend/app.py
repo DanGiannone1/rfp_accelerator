@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from azure.cosmos import CosmosClient, exceptions, PartitionKey
 from upload import start_upload_process
+from extraction import start_extraction_thread
 from global_vars import get_all_rfps, clear_completed_uploads
 import os
 from dotenv import load_dotenv
@@ -320,6 +321,23 @@ def get_artifacts():
   
     print(artifacts)
     return jsonify(artifacts), 200
+
+@app.route('/start-extraction', methods=['POST'])
+def start_extraction():
+    data = request.json
+    selected_rfp = 'MD_RFP_SUBSET'
+    print("Starting extraction process for RFP:", selected_rfp)
+    
+    if not selected_rfp:
+        return jsonify({"error": "No RFP selected"}), 400
+    
+    # Start the extraction process in a new thread
+    start_extraction_thread(selected_rfp)
+    
+    
+    return jsonify({
+        "message": "Requirements extraction process started. This can take anywhere from 2 to 30 minutes. Please check back periodically for updates."
+    }), 202
 
 
 if __name__ == '__main__':
