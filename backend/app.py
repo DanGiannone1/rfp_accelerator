@@ -6,6 +6,8 @@ from extraction import start_extraction_thread
 from global_vars import get_all_rfps, clear_completed_uploads
 import os
 from dotenv import load_dotenv
+from helper_functions import get_rfp_analysis_from_db
+from search import search
 
 load_dotenv()
 
@@ -43,17 +45,17 @@ def get_rfps_from_cosmos():
         print(f"Error reading from CosmosDB: {str(e)}")
         return []
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
+# @app.route('/upload', methods=['POST'])
+# def upload_file():
+#     if 'file' not in request.files:
+#         return jsonify({"error": "No file part"}), 400
+#     file = request.files['file']
+#     if file.filename == '':
+#         return jsonify({"error": "No selected file"}), 400
     
-    start_upload_process(file)
+#     start_upload_process(file)
     
-    return jsonify({"message": "RFP Ingestion process started. This can take anywhere from 2 to 15 minutes."}), 202
+#     return jsonify({"message": "RFP Ingestion process started. This can take anywhere from 2 to 15 minutes."}), 202
 
 @app.route('/available-rfps', methods=['GET'])
 def get_rfps():
@@ -137,7 +139,7 @@ tools = [
 
 
 
-def search(search_query):
+def rfp_search(search_query):
 
     #Implement logic to search the RFP for the search_query, combine results into one string, and return
 
@@ -339,6 +341,88 @@ def start_extraction():
         "message": "Requirements extraction process started. This can take anywhere from 2 to 30 minutes. Please check back periodically for updates."
     }), 202
 
+
+def get_rfps_from_blob_storage():
+    rfps = []
+    blobs = blob_container_client.list_blobs()
+    for blob in blobs:
+        rfps.append({"name": blob.name, "status": "Complete"})
+    return rfps
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+    
+    try:
+        file_content = file.read()
+        return process_rfp(file_content, file.filename)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# @app.route('/available-rfps', methods=['GET'])
+# def get_rfps():
+#     blob_rfps = get_rfps_from_blob_storage()
+#     return jsonify(blob_rfps)
+
+@app.route('/get-rfp-analysis', methods=['GET'])
+def get_rfp_analysis():
+    rfp_name = request.args.get('rfp_name')
+    result = get_rfp_analysis_from_db(rfp_name)
+    
+    if result == "RFP name is required":
+        return jsonify({"error": result}), 400
+    elif result == "RFP analysis not found":
+        return jsonify({"error": result}), 404
+    elif result.startswith("An error occurred"):
+        return jsonify({"error": result}), 500
+    else:
+        return jsonify({"skills_and_experience": result}), 200
+
+@app.route('/search', methods=['POST'])
+def search_employees():
+    data = request.json
+    rfp_name = data.get('rfpName')
+    feedback = data.get('feedback')
+    print(rfp_name)
+    print(feedback)
+
+    if not rfp_name:
+        return jsonify({"error": "RFP name is required"}), 400
+
+    try:
+
+        results = search(rfp_name, 'feedback')
+        return jsonify({"results": results}), 200
+    
+    except Exception as e:
+        print(f"Error during search: {str(e)}")
+        return jsonify({"error": "An error occurred during the search"}), 500
+
+def generate_mock_enhanced_resume_link(resume_id, rfp_name):
+    # This is a mock function to generate a fake enhanced resume link
+    return f"http://example.com/enhanced-resumes/{resume_id}.pdf"
+
+@app.route('/enhance', methods=['POST'])
+def enhance_resume():
+    data = request.json
+    resume_name = data.get('resumeName')
+    rfp_name = data.get('rfpName')
+    print(f"Enhancing resume {resume_name} for RFP {rfp_name}")
+
+    if not resume_name or not rfp_name:
+        return jsonify({"error": "Missing resumeId or rfpName"}), 400
+
+    # In a real implementation, you would process the resume here
+    # For this mock-up, we'll just generate a fake enhanced resume link
+    enhanced_resume_link = generate_mock_enhanced_resume_link(resume_name, rfp_name)
+
+    return jsonify({
+        "enhancedResumeLink": enhanced_resume_link
+    }), 200
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)
