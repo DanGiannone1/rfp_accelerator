@@ -281,10 +281,11 @@ skills_and_experience_prompt = """You are an RFP analyst. Your job is to read th
 """
 
 
-
 query_prompt = """You are given a write-up of the top skills and experience needed to win an RFP bid. Take that and 
-generate a list of 3-5 key terms/phrases that will be run in a search query to find resumes of people who have those skills and experiences. 
+generate a list of 3-5 key terms/phrases that will be run in a search query to find resumes of people who have those skills and experiences. Also output a filter term if one is provided in the additional user input.
 Make sure to just output the list and no other commentary. You also need to consider the "additional user input" text that a user may enter to refine or focus their search. 
+
+Guidance: Always output in valid JSON with two fields: search_query and filter. Filter should be an empty string if the user does not provide any sort of filtering criteria. Filter is OData syntax and will be used in Azure Cognitive Search. 
 
 
 <Example>
@@ -310,8 +311,10 @@ User:
 
 Additional User Input: <none>
 
-Assistant: Program Management Expertise in Water Infrastructure, Resource Allocation and Management in Water Projects, Stakeholder Engagement in Water Systems, Emergency Response for Water Systems, DC Water Systems Experience
-
+Assistant: {
+  "search_query": "Program Management Expertise in Water Infrastructure, Resource Allocation and Management in Water Projects, Stakeholder Engagement in Water Systems, Emergency Response for Water Systems",
+  "filter": ""
+}
 
 User:
 ## Write up: Analysis
@@ -332,9 +335,12 @@ User:
 7. **Communication Skills**: Excellent written and verbal communication skills to ensure clear and effective interaction with all project stakeholders.
 8. **Experience with DC Water Systems**: Familiarity with DC Water’s infrastructure, including the Blue Plains Advanced Wastewater Treatment Plant and the extensive network of pipes, valves, and pumping stations.
 
-Additional User Input: search for Adam Frank
+Additional User Input: show me people with 10+ years of experience
 
-Assistant: Adam Frank
+Assistant: {
+  "search_query": "Program Management Expertise in Water Infrastructure, Resource Allocation and Management in Water Projects, Stakeholder Engagement in Water Systems, Emergency Response for Water Systems",
+  "filter": "experienceLevel ge 10"
+}
 
 
 
@@ -344,7 +350,21 @@ Assistant: Adam Frank
 
 
 explanation_prompt = """You are an AI assistant. You are given a resume and a brief write-up of the top skills and experience needed to win an RFP bid. 
-Your job is to read the resume and the write-up, and output a brief explanation of why this candidate is a good match for the RFP. Try to keep it to under 4-5 sentences."""
+Your job is to read the resume and the write-up, and output a brief explanation of why this candidate is a good match for the RFP, along with the number of projects in the resume that are relevant to the RFP. 
+
+Your response should be a JSON object with two fields:
+1. 'explanation': keep it brief, 4-5 sentences.
+2. 'relevant_projects': An integer representing the number of projects in the resume that are relevant to the RFP.
+
+Example response format:
+{
+    "explanation": "<brief explanation>",
+    "relevant_projects": <integer>
+}
+
+Ensure your response is a valid JSON object.
+
+"""
 
 
 enhancement_prompt = """You are an AI assistant. You are given a resume and a brief analysis of an RFP. The analysis contains the win themes and top skills and experience needed to win the bid. 
@@ -358,3 +378,12 @@ but we can suggest emphasizing/de-emphasizing, rephrasing, or reorganizing the i
 
 
 """
+
+
+relevant_projects_prompt = """You are an AI assistant. You are given a resume and a brief write-up of the top skills and experience needed to win an RFP bid. 
+Your job is to read the resume and the write-up, and output how many of the projects in the resume are relevant to the RFP. Output only a single number"""
+
+
+
+reorder_work_experience_prompt = """You are an AI assistant. You are given a resume and a brief analysis of an RFP. You must re-order the work experience section of the resume to better match the RFP analysis.
+More relevant projects should be at the start of the work experience section. Less relevant projects should be at the end. You can't change any wording or add/remove anything, only re-order the projects."""

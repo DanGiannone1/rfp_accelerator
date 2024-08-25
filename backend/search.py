@@ -12,14 +12,14 @@ from azure.search.documents import SearchClient
 
 import os  
 from dotenv import load_dotenv  
-
+import json
 
 from openai import AzureOpenAI  
 import os
 from langchain_openai import AzureChatOpenAI
 
 from azure.search.documents.models import VectorizedQuery
-from prompts import explanation_prompt, query_prompt
+from prompts import explanation_prompt, query_prompt, relevant_projects_prompt
 from helper_functions import get_rfp_analysis_from_db
 
 from dotenv import load_dotenv 
@@ -80,70 +80,14 @@ primary_llm_json = AzureChatOpenAI(
 )
 
 
-def search(rfp_name, user_input):
-    # Get the necessary skills and experience for this RFP from Cosmos
-    skills_and_experience = get_rfp_analysis_from_db(rfp_name)
-    print(skills_and_experience)
 
-    # Generate a search query based on the skills and experience
-    llm_input = f"Write-up: {skills_and_experience}. \n\nAdditional User Input: {user_input}"
 
-    messages = [
-        {"role": "system", "content": query_prompt},
-        {"role": "user", "content": llm_input}
-    ]
+def generate_relevant_projects_number(content, skills_and_experience):
 
-    # for message in messages:
-    #     print(message)
-
-    response = primary_llm.invoke(messages)
-    search_query = response.content
-
-    print("Search Query: " , search_query)
-
-    #Vectorize the search query
-    query_vector = generate_embeddings(search_query)
-    vector_query = VectorizedQuery(vector=query_vector, k_nearest_neighbors=3, fields="searchVector")
-
-    #Run a hybrid search against the index. We perform a full-text search on the 'content' field and a vector search on the 'searchVector' field
-    results = search_client.search(
-        search_text=search_query,
-        vector_queries=[vector_query],
-        top=3
-    )
-
-    # Use ThreadPoolExecutor for asynchronous explanation generation
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        future_to_result = {executor.submit(generate_explanation, result['content'], skills_and_experience): result for result in results}
-        
-        formatted_results = []
-        for future in concurrent.futures.as_completed(future_to_result):
-            result = future_to_result[future]
-            try:
-                explanation = future.result(timeout=10)  # 10 second timeout
-                formatted_results.append({
-                    "name": result['sourceFileName'],
-                    "jobTitle": result['jobTitle'],
-                    "experienceLevel": result['experienceLevel'],
-                    "explanation": explanation
-                })
-            except Exception as exc:
-                print(f'Generating explanation for {result["sourceFileName"]} generated an exception: {exc}')
-                formatted_results.append({
-                    "name": result['sourceFileName'],
-                    "jobTitle": result['jobTitle'],
-                    "experienceLevel": result['experienceLevel'],
-                    "explanation": "Unable to generate explanation."
-                })
-
-    return formatted_results
-
-def generate_explanation(content, skills_and_experience):
-    
     input_text = f"Write-up: {skills_and_experience}\n\nResume: {content}"
 
     messages = [
-        {"role": "system", "content": explanation_prompt},
+        {"role": "system", "content": relevant_projects_prompt},
         {"role": "user", "content": input_text}
     ]
 
@@ -158,6 +102,103 @@ def generate_explanation(content, skills_and_experience):
         print(f"Error generating explanation: {str(e)}")
         return "Unable to generate explanation due to an error."
 
+
+
+
+
+def search(rfp_name, user_input):
+    # Get the necessary skills and experience for this RFP from Cosmos
+    skills_and_experience = get_rfp_analysis_from_db(rfp_name)
+    #print(skills_and_experience)
+
+    # Generate a search query based on the skills and experience
+    llm_input = f"Write-up: {skills_and_experience}. \n\nAdditional User Input: {user_input}"
+    print(llm_input)
+
+    messages = [
+        {"role": "system", "content": query_prompt},
+        {"role": "user", "content": llm_input}
+    ]
+
+    response = primary_llm_json.invoke(messages)
+    data = json.loads(response.content)
+    # Extract values into variables
+    search_query = data['search_query']
+    filter_value = data['filter']
+
+    # Print the variables to verify
+    print("Search Query:", search_query)
+    print("Filter:", filter_value)
+
+
+
+    #Vectorize the search query
+    query_vector = generate_embeddings(search_query)
+    vector_query = VectorizedQuery(vector=query_vector, k_nearest_neighbors=3, fields="searchVector")
+
+    #Run a hybrid search against the index
+    results = search_client.search(
+        search_text=search_query,
+        vector_queries=[vector_query],
+        top=3,
+        filter=filter_value
+    )
+
+    # Use ThreadPoolExecutor for asynchronous explanation and relevant projects generation
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_result = {executor.submit(generate_explanation, result['content'], skills_and_experience): result for result in results}
+        
+        formatted_results = []
+        for future in concurrent.futures.as_completed(future_to_result):
+            result = future_to_result[future]
+            try:
+                explanation_data = future.result(timeout=10)  # 10 second timeout
+                formatted_results.append({
+                    "name": result['sourceFileName'],
+                    "jobTitle": result['jobTitle'],
+                    "experienceLevel": result['experienceLevel'],
+                    "relevantProjects": explanation_data['relevant_projects'],
+                    "explanation": explanation_data['explanation']
+                })
+            except Exception as exc:
+                print(f'Generating explanation for {result["sourceFileName"]} generated an exception: {exc}')
+                formatted_results.append({
+                    "name": result['sourceFileName'],
+                    "jobTitle": result['jobTitle'],
+                    "experienceLevel": result['experienceLevel'],
+                    "relevantProjects": 0,
+                    "explanation": "Unable to generate explanation."
+                })
+
+    return formatted_results
+
+def generate_explanation(content, skills_and_experience):
+    input_text = f"Write-up: {skills_and_experience}\n\nResume: {content}"
+
+    messages = [
+        {"role": "system", "content": explanation_prompt},
+        {"role": "user", "content": input_text}
+    ]
+
+    try:
+        response = primary_llm_json.invoke(messages)
+        print(response.content)
+        response_content = json.loads(response.content)
+        
+        # Ensure the response contains both fields
+        explanation = response_content.get('explanation', "No explanation provided.")
+        relevant_projects = int(response_content.get('relevant_projects', 0))
+        
+        return {
+            "explanation": explanation,
+            "relevant_projects": relevant_projects
+        }
+    except Exception as e:
+        print(f"Error generating explanation: {str(e)}")
+        return {
+            "explanation": "Unable to generate explanation due to an error.",
+            "relevant_projects": 0
+        }
 
 def generate_embeddings(text, model="text-embedding-ada-002"): # model = "deployment_name"
     return aoai_client.embeddings.create(input = [text], model=model).data[0].embedding

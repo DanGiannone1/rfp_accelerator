@@ -387,20 +387,17 @@ def search_employees():
     data = request.json
     rfp_name = data.get('rfpName')
     feedback = data.get('feedback')
-    print(rfp_name)
-    print(feedback)
 
     if not rfp_name:
         return jsonify({"error": "RFP name is required"}), 400
 
     try:
-
-        results = search(rfp_name, 'feedback')
+        results = search(rfp_name, feedback)
         return jsonify({"results": results}), 200
-    
     except Exception as e:
         print(f"Error during search: {str(e)}")
         return jsonify({"error": "An error occurred during the search"}), 500
+
 
 def generate_mock_enhanced_resume_link(resume_id, rfp_name):
     # This is a mock function to generate a fake enhanced resume link
