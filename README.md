@@ -18,20 +18,34 @@ The RFP Accelerator provides a set of APIs and an associated front-end applicati
 - Requirements Extraction - extract requirements or any other structured data from the RFP
 - Response builder - Start building your response to the RFP
 
+# RFP Accelerator - Transform Your Organization's Proposal Process
+
+
 ## Setup
 
 ### Prerequisites
 
-Each module of the accelerator has a different set of prerequisite services. 
+Each module of the accelerator requires a different set of Azure services. Below is a breakdown of the prerequisites for each module:
 
-1. Upload - Azure Blob Storage, Azure Document Intelligence, Azure OpenAI, Azure Cosmos DB, managed identity between Doc Intelligence and Blob Storage. 
-2. Employee Matching - Azure Blob Storage, Azure Document Intelligence, Azure OpenAI, Azure Cosmos DB, Azure AI Search
-3. RFP Analyzer - Azure Cosmos DB, Azure OpenAI
-4. Requirements Extraction - Azure Cosmos DB, Azure OpenAI 
-5. Response Builder - Azure Cosmos DB, Azure OpenAI, Azure AI Search
+| Module | Required Azure Services |
+|--------|-------------------------|
+| Upload | - Azure Blob Storage<br>- Azure Document Intelligence<br>- Azure OpenAI<br>- Azure Cosmos DB<br>- Managed identity between Document Intelligence and Blob Storage |
+| Employee Matching | - Azure Blob Storage<br>- Azure Document Intelligence<br>- Azure OpenAI<br>- Azure Cosmos DB<br>- Azure AI Search |
+| RFP Analyzer | - Azure Cosmos DB<br>- Azure OpenAI |
+| Requirements Extraction | - Azure Cosmos DB<br>- Azure OpenAI |
+| Response Builder | - Azure Cosmos DB<br>- Azure OpenAI<br>- Azure AI Search |
 
-See the readme of each module for detailed documentation and setup instructions. 
+> **Note:** For detailed documentation and setup instructions, please refer to the README file in each module's directory.
 
+### Installation
+
+[Installation steps remain unchanged]
+
+### Running the Application
+
+[Running steps remain unchanged]
+
+[Rest of the content remains unchanged]
 ### Installation
 
 1. **Clone the repository**
