@@ -12,22 +12,25 @@ The RFP Accelerator provides a set of APIs and an associated front-end applicati
 
 ## Features
 
-- Intelligent, AI-powered document chunking
-- Finding the right employees for a given RFP
-- "Chat with your RFP" 
-- Requirements extraction
-- Response builder
+- Upload - Intelligent, AI-powered document chunking and "RFP at a glance"
+- Employee Matching - Find the right employees for a given RFP based on skillset or other attributes
+- RFP Analyzer - Ask questions about the RFP
+- Requirements Extraction - extract requirements or any other structured data from the RFP
+- Response builder - Start building your response to the RFP
 
 ## Setup
 
 ### Prerequisites
 
-Before setting up the RFP Accelerator, ensure you have the following:
+Each module of the accelerator has a different set of prerequisite services. 
 
-1. Azure Blob Storage account
-2. Azure Document Intelligence service
-3. Azure OpenAI service with a deployed model
-4. Managed identity configured between Blob Storage and Document Intelligence 
+1. Upload - Azure Blob Storage, Azure Document Intelligence, Azure OpenAI, Azure Cosmos DB, managed identity between Doc Intelligence and Blob Storage. 
+2. Employee Matching - Azure Blob Storage, Azure Document Intelligence, Azure OpenAI, Azure Cosmos DB, Azure AI Search
+3. RFP Analyzer - Azure Cosmos DB, Azure OpenAI
+4. Requirements Extraction - Azure Cosmos DB, Azure OpenAI 
+5. Response Builder - Azure Cosmos DB, Azure OpenAI, Azure AI Search
+
+See the readme of each module for detailed documentation and setup instructions. 
 
 ### Installation
 
