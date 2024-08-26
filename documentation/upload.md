@@ -12,11 +12,11 @@ The Upload process is the first step in the user flow for the application. When 
 2. The file is passed to the backend upload API route 
 3. The upload API route calls the `process_rfp` function from `upload.py` 
 4. `process_rfp` consists of numerous steps:
-   a. Upload the RFP to blob storage
-   b. Read the RFP from blob storage with Azure Document Intelligence to convert the document to text
-   c. Kick off the intelligent chunking process as a background thread
-   d. Pass the RFP text to the LLM to generate and stream back the overview which is displayed to the user
-   e. Store the overview on Cosmos DB
+   - Upload the RFP to blob storage
+   - Read the RFP from blob storage with Azure Document Intelligence to convert the document to text
+   - Kick off the intelligent chunking process as a background thread
+   - Pass the RFP text to the LLM to generate and stream back the overview which is displayed to the user
+   - Store the overview on Cosmos DB
 
 > **Note:** The chunking process is described in detail below.
 
