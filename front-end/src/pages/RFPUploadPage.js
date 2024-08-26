@@ -1,57 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Upload } from 'lucide-react';
-import RFPListItem from '../components/rfp/RFPListItem';
 import { useRFPList } from '../components/rfp/RFPListContext';
+import ExperienceSkillsetProfile from '../components/rfp/ExperienceSkillsetProfile';
+import RFPSelector from '../components/rfp/RFPSelector';
 
 const RFPUploadPage = () => {
-  const [uploadStatus, setUploadStatus] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [isPolling, setIsPolling] = useState(false);
-  const { rfps, setRFPs, isLoading } = useRFPList();
-
-  const pollInProgressRFPs = useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost:5000/in-progress-rfps');
-      const data = await response.json();
-      setRFPs(prevRFPs => {
-        const updatedRFPs = [...prevRFPs];
-        data.forEach(rfp => {
-          const index = updatedRFPs.findIndex(item => item.name === rfp.name);
-          if (index !== -1) {
-            updatedRFPs[index] = rfp;
-          } else {
-            updatedRFPs.push(rfp);
-          }
-        });
-        return updatedRFPs;
-      });
-      return data.some(rfp => rfp.status === 'Processing');
-    } catch (error) {
-      console.error('Error polling in-progress RFPs:', error);
-      return false;
-    }
-  }, [setRFPs]);
-
-  useEffect(() => {
-    let intervalId;
-    if (isPolling) {
-      intervalId = setInterval(async () => {
-        const shouldContinuePolling = await pollInProgressRFPs();
-        if (!shouldContinuePolling) {
-          setIsPolling(false);
-          setUploadStatus('');
-        }
-      }, 5000);
-    }
-    return () => clearInterval(intervalId);
-  }, [isPolling, pollInProgressRFPs]);
+  const { setRFPs } = useRFPList();
+  const [selectedRFP, setSelectedRFP] = useState(null);
+  const [uploadStream, setUploadStream] = useState(null);
 
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     setIsUploading(true);
-    setUploadStatus('RFP Ingestion process started. This can take anywhere from 2 to 15 minutes.');
+    setSelectedRFP(file.name);
+    setUploadStream(null);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -62,68 +27,71 @@ const RFPUploadPage = () => {
         body: formData,
       });
 
-      const data = await response.json();
-
       if (response.ok) {
-        setUploadStatus(`${data.message}`);
-        setIsPolling(true);
-        
+        setUploadStream(response.body);
         setRFPs(prevRFPs => [
           ...prevRFPs,
-          { name: file.name, status: 'Processing' }
+          { name: file.name, status: 'Complete' }
         ]);
       } else {
-        setUploadStatus(`Error: ${data.error}`);
+        const errorData = await response.json();
+        console.error(`Error: ${errorData.error}`);
       }
     } catch (error) {
-      setUploadStatus(`Error: ${error.message}`);
+      console.error(`Error: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
   };
 
+  const handleSelectRFP = (rfpName) => {
+    setSelectedRFP(rfpName);
+    setUploadStream(null); // Clear any existing upload stream
+  };
+
   return (
-    <div className="max-w-md mx-auto">
-      <h1 className="text-4xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Upload an RFP</h1>
-      <div className="border-2 border-dashed border-gray-600 rounded-xl p-8 text-center mb-8 bg-gray-800 bg-opacity-50 shadow-lg">
-        <Upload className="mx-auto mb-4 text-blue-400" size={48} />
-        <p className="mb-4 text-gray-300">Drag and drop your RFP file here, or click to select a file</p>
-        <input
-          type="file"
-          onChange={handleFileUpload}
-          className="hidden"
-          id="file-upload"
-          disabled={isUploading}
-        />
-        <label
-          htmlFor="file-upload"
-          className={`bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-2 px-6 rounded-full cursor-pointer transition duration-300 ${
-            isUploading ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
-        >
-          {isUploading ? 'Uploading...' : 'Upload'}
-        </label>
-        {uploadStatus && (
-          <p className={`mt-4 ${
-            uploadStatus.includes('Error') ? 'text-red-400' : 
-            uploadStatus.includes('RFP Ingestion') ? 'text-yellow-400' :
-            'text-green-400'
-          }`}>
-            {uploadStatus}
-          </p>
-        )}
-      </div>
-      <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 shadow-lg">
-        <h2 className="text-2xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Available RFPs</h2>
-        {isLoading ? (
-          <p className="text-gray-300">Loading RFPs...</p>
-        ) : (
-          <ul className="space-y-2">
-            {rfps.map((rfp, index) => (
-              <RFPListItem key={index} rfp={rfp} />
-            ))}
-          </ul>
-        )}
+    <div className="flex flex-col h-screen max-w-7xl mx-auto px-4 py-6 overflow-hidden">
+      <div className="flex flex-1 gap-4 overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden pr-4">
+          <div className="flex-1 overflow-hidden mb-6">
+            <ExperienceSkillsetProfile 
+              rfp={selectedRFP} 
+              uploadStream={uploadStream} 
+              isUploading={isUploading}
+            />
+          </div>
+          <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 shadow-lg">
+            <h2 className="text-2xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
+              Upload an RFP
+            </h2>
+            <div className="border-2 border-dashed border-gray-600 rounded-xl p-6 text-center">
+              <Upload className="mx-auto mb-4 text-blue-400" size={36} />
+              <p className="mb-4 text-gray-300 text-sm">Drag and drop your RFP file here, or click to select a file</p>
+              <input
+                type="file"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="file-upload"
+                disabled={isUploading}
+              />
+              <label
+                htmlFor="file-upload"
+                className={`bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-2 px-4 rounded-full cursor-pointer transition duration-300 text-sm ${
+                  isUploading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {isUploading ? 'Uploading...' : 'Upload'}
+              </label>
+            </div>
+          </div>
+        </div>
+        <div className="w-64 flex-shrink-0">
+          <RFPSelector
+            selectedRFPs={selectedRFP}
+            onSelectRFP={handleSelectRFP}
+            multiSelect={false}
+          />
+        </div>
       </div>
     </div>
   );

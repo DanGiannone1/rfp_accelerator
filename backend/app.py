@@ -1,13 +1,16 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from azure.cosmos import CosmosClient, exceptions, PartitionKey
-from upload import start_upload_process
+from upload import process_rfp
 from extraction import start_extraction_thread
 from global_vars import get_all_rfps, clear_completed_uploads
+from extraction import start_extraction_thread, get_extraction_progress
 import os
 from dotenv import load_dotenv
 from helper_functions import get_rfp_analysis_from_db
 from search import search
+from azure.storage.blob import BlobServiceClient
+from chat import run_interaction
 
 load_dotenv()
 
@@ -18,6 +21,14 @@ COSMOS_HOST = os.getenv('COSMOS_HOST')
 COSMOS_MASTER_KEY = os.getenv('COSMOS_MASTER_KEY')
 COSMOS_DATABASE_ID = os.getenv('COSMOS_DATABASE_ID')
 COSMOS_CONTAINER_ID = os.getenv('COSMOS_CONTAINER_ID')
+
+STORAGE_ACCOUNT_CONNECTION_STRING = os.getenv("STORAGE_ACCOUNT_CONNECTION_STRING")
+STORAGE_ACCOUNT_CONTAINER = os.getenv("STORAGE_ACCOUNT_CONTAINER")
+STORAGE_ACCOUNT_RESUME_CONTAINER = os.getenv("STORAGE_ACCOUNT_RESUME_CONTAINER")
+blob_service_client = BlobServiceClient.from_connection_string(STORAGE_ACCOUNT_CONNECTION_STRING)
+blob_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_CONTAINER)
+blob_resume_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_RESUME_CONTAINER)
+
 
 selected_rfp = None
 
@@ -91,66 +102,6 @@ aoai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 
 
 
-primary_llm = AzureChatOpenAI(
-            azure_deployment=aoai_deployment,
-            api_version="2024-05-01-preview",
-            temperature=0,
-            max_tokens=None,
-            timeout=None,
-            max_retries=2,
-            api_key=aoai_key,
-            azure_endpoint=aoai_endpoint
-    )
-
-
-tools = [
-    {
-    "name": "search",
-    "description": "search the RFP for information. Use this tool when a user asks a question that is not specific to a particular section, but rather a general question about the RFP.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-        "search_query": {"type": "string", "description": "The search query to use"}
-        },
-        "required": ["search_query"]
-        }
-    },
-    {
-    "name": "get_sections",
-    "description": "Pull specific sections from the database. Use this tool when a user asks a question that is specific to a particular section or sections",
-    "parameters": {
-        "type": "object",
-        "properties": {
-        "sections": {"type": "string", "description": "the sections to pull"}
-        },
-        "required": ["sections"]
-        }
-    },
-    {
-        "name": "get_full_rfp",
-        "description": "Pull the full RFP from the database. Use this tool when a user asks a question that can only be answered by looking at the full document",
-        "parameters": {
-            "type": "object",
-            "properties": {}
-        }
-    }
-
-]
-
-
-
-def rfp_search(search_query):
-
-    #Implement logic to search the RFP for the search_query, combine results into one string, and return
-
-
-    return 
-
-
-
-llm_with_tools = primary_llm.bind_tools(tools)
-
-from langchain_core.tools import tool
 
 client = cosmos_client.CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
 try:
@@ -174,172 +125,17 @@ except exceptions.CosmosHttpResponseError as e:
         print('\nrun_sample has caught an error. {0}'.format(e.message))
 
 
-@tool
-def multiply(first_int: int, second_int: int) -> int:
-    """Multiply two integers together."""
-    return first_int * second_int
-
-@tool 
-def get_full_rfp():
-    """Get the full RFP from CosmosDB"""
-    files = []
-    #Set partition_key to the global 'selected_rfp' variable 
-    partition_key = selected_rfp
-    print(partition_key)
-    context = ""
-    try:
-        print(f"Fetching files from CosmosDB for partitionKey: {partition_key}")
-        query = f"SELECT * FROM c WHERE c.partitionKey = '{partition_key}' AND IS_DEFINED(c.section_content)"
-        items = list(container.query_items(query=query, enable_cross_partition_query=True))
-        print(f"Found {len(items)} files in CosmosDB for partitionKey: {partition_key} with section_content")
-        for item in items:
-            files.append(item)
-        for file in files:
-            context += file['section_content']
-        return context
-    except exceptions.CosmosHttpResponseError as e:
-        print(f"Error reading from CosmosDB: {e.message}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-
-    
-    
-    return context
-
-@tool
-def get_sections(sections):
-    """Get 1 or more sections from CosmosDB"""
-    partition_key = "MD_RFP_SUBSET"
-    context = ""
-    try:
-        print(f"Fetching sections from CosmosDB for partitionKey: {partition_key} and sections: {sections}")
-        query = f"SELECT * FROM c WHERE c.partitionKey = '{partition_key}' AND CONTAINS(c.section_id, '{sections}')"
-        items = list(container.query_items(query=query, enable_cross_partition_query=True))
-        print(f"Found {len(items)} sections in CosmosDB for partitionKey: {partition_key} with section_header containing '{sections}'")
-        for item in items:
-            context += item['section_content']
-        return context
-    except exceptions.CosmosHttpResponseError as e:
-        print(f"Error reading from CosmosDB: {e.message}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-
-    return context
-
-
-def run_interaction_test(user_message):
-    context = ""
-
-    messages = [
-        {"role": "system", "content": "You are a helpful AI assistant. "},
-        {"role": "user", "content": user_message},
-    ]
-
-    print("Deciding what to do...")
-    raw_response = llm_with_tools.invoke(messages)
-    tool_calls = raw_response.tool_calls
-    print(tool_calls)
-    function_name = tool_calls[0]['name']
-
-    if function_name == "get_full_rfp":
-        context = get_full_rfp.invoke({})
-
-    if function_name == "get_sections":
-        args = tool_calls[0]['args']
-        context = get_sections.invoke(args)
-
-
-    # args = tool_calls[0]['args']
-    # if not args:
-    #     args = ""
-    # else:
-    #     # If args is not empty, format the arguments as a string
-    #     args = ', '.join(f"{k}={v}" for k, v in args.items())
-    # print(args)
-    # function_call = f"{function}({args})"
-    # print(function_call)
-
-    
-
-    # context = eval(function_call)
-
-
-    llm_input = f"<Start Context>\n{context}\n<End Context>\n{user_message}"
-    print(llm_input)
-
-    messages = [
-        {"role": "system", "content": "You are a helpful AI assistant that answers questions about RFPs. please output in markdown"},
-        {"role": "user", "content": llm_input},
-    ]
-    
-    for chunk in primary_llm.stream(messages):
-        yield chunk.content
-
-    return "success"
-
-def run_interaction(user_message):
-    context = ""
-
-    llm_input = f"<Start Context>\n{context}\n<End Context>\n{user_message}"
-
-    messages = [
-        {"role": "system", "content": "You are a helpful AI assistant"},
-        {"role": "user", "content": llm_input},
-    ]
-    
-    for chunk in primary_llm.stream(messages):
-        yield chunk.content
 
 
 @app.route('/chat', methods=['POST'])
 def run():
-    user_message = request.json['message']
-    print("User Message: ", user_message)
-    return Response(run_interaction_test(user_message), mimetype='text/event-stream')
-
-
-ARTIFACTS_DATA = [  
-    {'rfp': '123', 'name': 'Artifact 1', 'status': 'READY', 'type': 'requirements'},  
-    {'rfp': '123', 'name': 'Artifact 2', 'status': 'IN_PROGRESS', 'type': 'requirements'},  
-    {'rfp': '456', 'name': 'Artifact A', 'status': 'READY', 'type': 'requirements'},  
-    {'rfp': '456', 'name': 'Artifact B', 'status': 'READY', 'type': 'requirements'},  
-]  
-  
-@app.route('/artifacts', methods=['GET'])  
-def get_artifacts():  
-    rfp = request.args.get('rfp')  
-    artifact_type = request.args.get('type')
-    print(rfp)
-    print(artifact_type)  
-  
-    if not rfp or not artifact_type:  
-        return jsonify({'error': 'Missing required parameters'}), 400  
-  
-    artifacts = [
-        {'name': 'Artifact 1', 'status': 'READY'},
-        {'name': 'Artifact 2', 'status': 'READY'},
-        {'name': 'Artifact 3', 'status': 'READY'}
-    ]
-  
-    print(artifacts)
-    return jsonify(artifacts), 200
-
-@app.route('/start-extraction', methods=['POST'])
-def start_extraction():
     data = request.json
-    selected_rfp = 'MD_RFP_SUBSET'
-    print("Starting extraction process for RFP:", selected_rfp)
-    
-    if not selected_rfp:
-        return jsonify({"error": "No RFP selected"}), 400
-    
-    # Start the extraction process in a new thread
-    start_extraction_thread(selected_rfp)
-    
-    
-    return jsonify({
-        "message": "Requirements extraction process started. This can take anywhere from 2 to 30 minutes. Please check back periodically for updates."
-    }), 202
+    user_message = data['message']
+    rfp_name = data['rfp_name']
+    print(f"User Message: {user_message}, RFP Name: {rfp_name}")
+    return Response(run_interaction(user_message, rfp_name), mimetype='text/event-stream')
+
+
 
 
 def get_rfps_from_blob_storage():
@@ -363,10 +159,7 @@ def upload_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# @app.route('/available-rfps', methods=['GET'])
-# def get_rfps():
-#     blob_rfps = get_rfps_from_blob_storage()
-#     return jsonify(blob_rfps)
+
 
 @app.route('/get-rfp-analysis', methods=['GET'])
 def get_rfp_analysis():
@@ -381,6 +174,7 @@ def get_rfp_analysis():
         return jsonify({"error": result}), 500
     else:
         return jsonify({"skills_and_experience": result}), 200
+
 
 @app.route('/search', methods=['POST'])
 def search_employees():
@@ -399,26 +193,65 @@ def search_employees():
         return jsonify({"error": "An error occurred during the search"}), 500
 
 
-def generate_mock_enhanced_resume_link(resume_id, rfp_name):
-    # This is a mock function to generate a fake enhanced resume link
-    return f"http://example.com/enhanced-resumes/{resume_id}.pdf"
 
-@app.route('/enhance', methods=['POST'])
-def enhance_resume():
+@app.route('/resume', methods=['GET'])
+def get_resume():
+    resume_name = request.args.get('resumeName')[:-4] + 'pdf'
+  
+    blob_client = blob_resume_container_client.get_blob_client('pdf/' + resume_name)
+    download_stream = blob_client.download_blob()
+    file_content = download_stream.readall()
+    
+    if file_content:
+        response = make_response(file_content)
+        response.headers['Content-Type'] = 'application/pdf'
+        return response
+    else:
+        return make_response('Failed to download file', 500)
+    
+
+
+@app.route('/download', methods=['GET'])
+def download_resume():
+    resume_name = request.args.get('resumeName')
+  
+    blob_client = blob_resume_container_client.get_blob_client('processed/' + resume_name)
+    download_stream = blob_client.download_blob()
+    file_content = download_stream.readall()
+    
+    if file_content:
+        response = make_response(file_content)
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        return response
+    else:
+        return make_response('Failed to download file', 500)
+
+
+@app.route('/start-extraction', methods=['POST'])
+def start_extraction():
     data = request.json
-    resume_name = data.get('resumeName')
-    rfp_name = data.get('rfpName')
-    print(f"Enhancing resume {resume_name} for RFP {rfp_name}")
-
-    if not resume_name or not rfp_name:
-        return jsonify({"error": "Missing resumeId or rfpName"}), 400
-
-    # In a real implementation, you would process the resume here
-    # For this mock-up, we'll just generate a fake enhanced resume link
-    enhanced_resume_link = generate_mock_enhanced_resume_link(resume_name, rfp_name)
-
+    rfp_name = data.get('rfp_name')
+    
+    if not rfp_name:
+        return jsonify({"error": "No RFP name provided"}), 400
+    
+    start_extraction_thread(rfp_name)
+    
     return jsonify({
-        "enhancedResumeLink": enhanced_resume_link
+        "message": "Requirements extraction process started. This can take some time. Please check back periodically for updates."
+    }), 202
+
+@app.route('/extraction-progress', methods=['GET'])
+def extraction_progress():
+    rfp_name = request.args.get('rfp_name')
+    
+    if not rfp_name:
+        return jsonify({"error": "No RFP name provided"}), 400
+    
+    progress = get_extraction_progress(rfp_name)
+    
+    return jsonify({
+        "progress": progress
     }), 200
 
 if __name__ == '__main__':

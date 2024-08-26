@@ -18,21 +18,9 @@ const RFPAnalyzerPage = () => {
     }
   }, [chatMessages]);
 
-  const handleRFPSelect = async (rfpName) => {
+  const handleRFPSelect = (rfpName) => {
     setSelectedRFP(rfpName);
     setChatMessages([]);
-
-    try {
-      await fetch('http://localhost:5000/select-rfp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ rfp_name: rfpName }),
-      });
-    } catch (error) {
-      console.error('Error selecting RFP:', error);
-    }
   };
 
   const handleSendMessage = async () => {
@@ -51,6 +39,7 @@ const RFPAnalyzerPage = () => {
         },
         body: JSON.stringify({
           message: inputMessage,
+          rfp_name: selectedRFP
         }),
       });
 
