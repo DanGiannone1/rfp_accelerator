@@ -59,7 +59,7 @@ const ExperienceSkillsetProfile = ({ rfp, uploadStream, isUploading }) => {
   return (
     <div className="bg-gray-800 bg-opacity-50 rounded-xl p-6 shadow-lg h-[calc(100vh-250px)] flex flex-col">
       <h2 className="text-2xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-        Experience & Skillset Profile
+        Overview
       </h2>
       <div className="overflow-y-auto flex-grow">
         {(isUploading || isLoading) && !isStreaming ? (
@@ -75,7 +75,7 @@ const ExperienceSkillsetProfile = ({ rfp, uploadStream, isUploading }) => {
           </div>
         ) : (
           <p className="text-gray-300">
-            Select an RFP or upload a new one to see the extracted experience and skillset profile.
+            Select an RFP or upload a new one
           </p>
         )}
       </div>
