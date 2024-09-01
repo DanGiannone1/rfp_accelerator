@@ -5,7 +5,7 @@ import threading
 
 from langchain_openai import AzureChatOpenAI
 
-from prompts import toc_prompt, section_validator_prompt
+from prompts import toc_prompt, section_validator_prompt, section_validator_prompt_v2
 
 import azure.cosmos.cosmos_client as cosmos_client
 import azure.cosmos.exceptions as exceptions
@@ -48,26 +48,42 @@ primary_llm_json = AzureChatOpenAI(
     model_kwargs={"response_format": {"type": "json_object"}}
 )
 
-def inference(llm, messages, step, json_mode=False):
-    raw_response = llm.invoke(messages)
-    response = raw_response.content if not json_mode else json.loads(raw_response.content)
-    return response
+
 
 def get_table_of_contents(adi_result_object):
     first_pages = adi_result_object.content[:5000]  # Adjust as needed
     messages = [{"role": "system", "content": toc_prompt},
                 {"role": "user", "content": first_pages}]
-    table_of_contents = inference(primary_llm, messages, "toc_extraction")
+    
+    table_of_contents = primary_llm.invoke(messages)
     print("Table of Contents: ", table_of_contents)
-    return table_of_contents
+    return table_of_contents.content
 
 def validate_section(section, table_of_contents):
-    section_and_toc = f"Table of Contents: {table_of_contents} \n\nSection to validate: {section}"
-    messages = [{"role": "system", "content": section_validator_prompt},
-                {"role": "user", "content": section_and_toc}]
-    result = inference(primary_llm_json, messages, "section_validation", json_mode=True)
-    print(f'{section} - {result["thought_process"]} - {result["answer"]}')
-    return result["answer"]
+    # section_and_toc = f"Table of Contents: {table_of_contents} \n\nSection to validate: {section}"
+    # messages = [{"role": "system", "content": section_validator_prompt},
+    #             {"role": "user", "content": section_and_toc}]
+
+    section_input = f"Section to validate: {section}"
+    messages = [{"role": "system", "content": section_validator_prompt_v2},
+                {"role": "user", "content": section_input}]
+
+    raw_response = primary_llm_json.invoke(messages)
+    try:
+        # Attempt to load the JSON and extract the fields
+        result_json = json.loads(raw_response.content)
+        thought_process = result_json.get("thought_process")
+        answer = result_json.get("answer")
+        print(f"Section: {section}")
+        print(f"Thought process: {thought_process}")
+        print(f"Answer: {answer}")
+        print("\n\n\n****************")
+    except (json.JSONDecodeError, KeyError) as e:
+        print(f"Error loading JSON or extracting fields: {e}. Section in question: {section}")
+        return None
+    
+
+    return answer
 
 def set_valid_sections(adi_result_object, table_of_contents):
     invalid_sections = set()
@@ -77,10 +93,11 @@ def set_valid_sections(adi_result_object, table_of_contents):
         if paragraph.role == "title" or paragraph.role == "sectionHeading":
             content_dict[paragraph.content] = ""
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         section_args = ((section, table_of_contents) for section in content_dict.keys())
         validation_results = list(executor.map(lambda args: validate_section(*args), section_args))
 
+    print("Completed initial validation of section headings")
     for section, result in zip(content_dict.keys(), validation_results):
         if result.lower() == 'no':
             invalid_sections.add(section)
@@ -153,10 +170,11 @@ def upload_to_cosmos(filename, content_dict, table_of_contents):
     print("Loading table of contents to Cosmos...")
 
 def chunking(adi_result_object, original_filename):
-    try:
+    #try:
         print("Getting table of contents")
         table_of_contents = get_table_of_contents(adi_result_object)
         print("Table of contents retrieved")
+
 
         print("Setting valid sections")
         content_dict = set_valid_sections(adi_result_object, table_of_contents)
@@ -170,8 +188,8 @@ def chunking(adi_result_object, original_filename):
         upload_to_cosmos(original_filename, content_dict, table_of_contents)
         print("Upload to Cosmos DB complete")
 
-    except Exception as e:
-        print(f"Error in chunking process for {original_filename}: {str(e)}")
+    #except Exception as e:
+        #print(f"Error in chunking process for {original_filename}: {str(e)}")
 
 # This function can be called from upload.py to start the background chunking process
 def start_chunking_process(adi_result_object, original_filename):

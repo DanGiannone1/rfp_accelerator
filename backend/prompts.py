@@ -85,8 +85,8 @@ content_parsing_prompt = """You are an RFP content parser. Your job is to look a
 
 Your output should always be valid JSON. The JSON must contain the following two keys:
 
-thought_process: This key should contain your thought process. The most important part of your job is capturing the page numbers and section headings correctly. For each logical piece of content, take note of the section heading and page number. You can also comment on which pieces of content you feel are actionable requirements.
-content: This key should contain the parsed content. The content MUST be structured in the following manner: <section_name> | <page_number> | <section_number> | <verbatim_content> | <is_requirement>. Each item within a line must be separated by a pipe "|". Try to have one line per subsection you see. If it is a huge subsection you can break it up. 
+analysis: This key should contain your thought process. The most important part of your job is capturing the page numbers and section headings correctly. For each logical piece of content, take note of the section heading and page number. You can also comment on which pieces of content you feel are actionable requirements.
+output: This key should contain the parsed content in the form of nested json with the following fields: <section_name>, <page_number>, <section_number>, <content>, <is_requirement>. Try to have one output entry per subsection you see. If it is a huge subsection you can break it up. The content field must match verbatim, no changing any wording. 
 
 <is_requirement> should be "yes" if the content is an actionable requirement, and "no" if it is not. The general rule of thumb is, if a responder would need to include this in their response, it should be marked as a requirement. If it is purely informative, it should marked as no.  
 
@@ -114,8 +114,30 @@ B. Deliver a Staffing Plan
 Assistant: 
 
 {
-  "thought_process": "I see section 2.3, 2.3.1, and 2.3.2. I see page 5 halfway through the content, so I know section 2.3 and 2.3.1 are on page 5. 2.3.2 is after page 5, so that would be page 6. All of this content would be important to reference in a bid response, so i will indicate it is all requirements.",
-  "content": "Responsibilities and Tasks | 5 | 2.3 | This section discussed responsibilities and tasks of the contractor. | yes \n Fulfillment Requirement | 5 | 2.3.1 | CSRs shall receive and answer email and telephone requests for document fulfillment, updating the appropriate DHS system to record and track the action taken within the CRM. The CSR shall: A. Mail general forms requested by the Customer no later than two (2) Business Days after receipt of the request. B. Forward correspondence to the LDSS C. Generate and mail from a secure location within the CSC | yes \n Staffing Plan | 6 | 2.3.2 | The Contractor shall: A. Identify and use accepted call center industry standards B. Deliver a Staffing Plan | yes"
+  "analysis": "I see section 2.3, 2.3.1, and 2.3.2. I see page 5 halfway through the content, so I know section 2.3 and 2.3.1 are on page 5. 2.3.2 is after page 5, so that would be page 6. All of this content would be important to reference in a bid response, so I will indicate it is all requirements.",
+  "output": [
+    {
+      "section_name": "Responsibilities and Tasks",
+      "page_number": 5,
+      "section_number": "2.3",
+      "content": "This section discussed responsibilities and tasks of the contractor.",
+      "is_requirement": "yes"
+    },
+    {
+      "section_name": "Fulfillment Requirement",
+      "page_number": 5,
+      "section_number": "2.3.1",
+      "content": "CSRs shall receive and answer email and telephone requests for document fulfillment, updating the appropriate DHS system to record and track the action taken within the CRM. The CSR shall: A. Mail general forms requested by the Customer no later than two (2) Business Days after receipt of the request. B. Forward correspondence to the LDSS C. Generate and mail from a secure location within the CSC",
+      "is_requirement": "yes"
+    },
+    {
+      "section_name": "Staffing Plan",
+      "page_number": 6,
+      "section_number": "2.3.2",
+      "content": "The Contractor shall: A. Identify and use accepted call center industry standards B. Deliver a Staffing Plan",
+      "is_requirement": "yes"
+    }
+  ]
 }
 
 #End examples#
@@ -213,7 +235,7 @@ Answer yes or no depending on what you see in the table of contents. Guidance:
 
 1. If you see the section directly in the table of contents, output 'yes'
 2. If you think the section is likely a subsection of a section in the table of contents, output 'yes'. For example, if you see section 4 in the table of contents and the user asks for section 4.1, this is valid. Generally anything like X.X.X is valid.
-3. If you don't see the section and don't think it would be a part of any section in the table of contents, output 'no'
+3. If you don't see the section and don't think it would be a part of any section in the table of contents, output 'no'. Only output no when you don't realistically see how the section could be a valid section header.
 
 Formatting: 
 - Your output should be in valid JSON format with two fields: 'thought_process' and 'answer'. 
@@ -260,6 +282,44 @@ Section: 4.1 - pre-proposal conference
 Assistant: {\n  \"thought_process\": \"I see section 4 in the table of contents. I think 4.1 is likely a subsection of 4, so I will output yes.\",\n  \"answer\": \"yes\"\n}
 
 #End Examples#
+
+
+
+"""
+
+
+section_validator_prompt_v2 = """Your job is to take a section heading from an RFP document, and output whether you think that the section heading is valid or not. Sometimes the certain text is incorrectly identified as a section heading and we need to pinpoint that.
+Answer yes or no depending on your intuition and knowledge of RFP structures.
+
+1. If you think the section heading is valid, output 'yes'
+2. If you think the section heading is not valid, output 'no'
+
+
+Formatting: 
+- Your output should be in valid JSON format with two fields: 'thought_process' and 'answer'. 
+- 'thought_process' should contain your thought process. Describe why you think the section is valid or not within the context of RFPs.
+- 'answer' should contain your answer, which should be 'yes' or 'no'
+
+#Examples#
+
+Section: 2.1.1
+Assistant: {\n  \"thought_process\": \"This is a fairly standard numerical section heading, very common in RFPs, so I will output yes.\",\n  \"answer\": \"yes\"\n}
+
+
+
+Section: Customer Service Center Solicitation #: OS/CSC-22-001-S
+Assistant: {\n  \"thought_process\": \"This looks like a document heading that was incorrectly identified as a section heading, i will output no\",\n  \"answer\": \"no\"\n}
+
+
+Section:  Project Implementation and Support
+Assistant: {\n  \"thought_process\": \"Project Implementation and Support is a common section in RFP documents, i will output yes.\",\n  \"answer\": \"yes\"\n}
+
+Section: PARTI GENERAL INFORMATION
+Assistant: {\n  \"thought_process\": \"Despite the typo, "Part 1 - General information" does appear often in RFPs and appears to be a valid.\",\n  \"answer\": \"yes\"\n}
+
+
+#End Examples#
+
 
 
 """
@@ -387,3 +447,46 @@ Your job is to read the resume and the write-up, and output how many of the proj
 
 reorder_work_experience_prompt = """You are an AI assistant. You are given a resume and a brief analysis of an RFP. You must re-order the work experience section of the resume to better match the RFP analysis.
 More relevant projects should be at the start of the work experience section. Less relevant projects should be at the end. You can't change any wording or add/remove anything, only re-order the projects."""
+
+
+response_to_requirement_prompt = """You are an AI assistant. You are given a requirement from an RFP document. 
+Your job is to generate a dummy response to the requirement. The response should be a few sentences long and should be relevant to the requirement. It must be in valid markdown syntax.
+
+
+#Examples#
+
+User: CSC services include live operator and Interactive Voice Response Services (IVRS), for receiving and responding to inquiries via telephone. In addition, services include response to inquiries received via facsimile, electronic mail using a DHS email account and U.S. mail. Additionally, a tracking and reporting system is required to provide reports of the types and number of Customer contacts received and resolved on behalf of the Department. CSC services will be utilized by all DHS Administrations Statewide, notably the Central Office and the Local Departments of Social Services (LDSS) and Child Support offices located in all 24 jurisdictions in Maryland.
+
+Assistant: 
+
+Our Customer Service Center (CSC) services are designed to comprehensively address the needs outlined in the requirement. Below is a detailed description of how our services align with your specifications:
+
+## Live Operator and Interactive Voice Response Services (IVRS)
+- **Live Operator Services**: Our team of trained live operators is available to handle inquiries via telephone, ensuring prompt and accurate responses to all customer queries.
+- **IVRS**: We offer a robust Interactive Voice Response System that efficiently manages call routing, providing self-service options and directing calls to the appropriate live operators when necessary.
+
+### Multi-Channel Inquiry Response
+- **Telephone**: We provide dedicated phone lines for receiving and responding to customer inquiries.
+- **Facsimile**: Our system is equipped to handle inquiries received via fax, ensuring they are processed and responded to in a timely manner.
+- **Electronic Mail**: Utilizing a DHS email account, our team manages and responds to email inquiries, maintaining a high standard of communication.
+- **U.S. Mail**: We also handle inquiries received through traditional mail, ensuring all correspondence is addressed appropriately.
+
+### Tracking and Reporting System
+- **Comprehensive Reporting**: Our tracking and reporting system is designed to capture detailed information on the types and number of customer contacts received and resolved. This includes:
+  - **Types of Inquiries**: Categorization of inquiries to identify common issues and trends.
+  - **Resolution Metrics**: Tracking the resolution status of each inquiry to ensure timely and effective responses.
+  - **Departmental Reports**: Generating reports for the Central Office, Local Departments of Social Services (LDSS), and Child Support offices across all 24 jurisdictions in Maryland.
+
+### Statewide Utilization
+- **Central Office and LDSS**: Our services are tailored to meet the needs of the Central Office and Local Departments of Social Services, ensuring consistent support across all administrative levels.
+- **Child Support Offices**: We provide specialized support for Child Support offices, addressing the unique requirements of these departments.
+
+Our CSC services are designed to provide comprehensive support, ensuring efficient and effective communication across all channels and jurisdictions within the DHS framework.
+
+Our CSC services are designed to provide comprehensive support, ensuring efficient and effective communication across all channels and jurisdictions within the DHS framework.
+
+
+User: It is the State's intention to obtain goods and services, as specified in this RFP, from a Contract between the selected Offeror and the State.
+Assistant: The Offeror acknowledges the State's intention to procure the specified goods and services through a formal Contract. The Offeror is committed to delivering the required goods and services in accordance with the terms and conditions outlined in the RFP and the resulting Contract.
+
+"""

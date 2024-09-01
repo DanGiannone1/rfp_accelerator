@@ -3,29 +3,39 @@
 import os
 # Specify the directory containing the code files
 directory = 'D:/projects/rfp_accelerator/rfp_accelerator/'
+
 files = [
      'backend/app.py',
      #'backend/search.py',
      #'backend/helper_functions.py',
-     'backend/upload.py',
-     'backend/chunking.py',
+     #'backend/upload.py',
+     #'backend/enhance.py',
+     #'backend/chunking.py',
      #'backend/extraction.py',
+     'backend/response.py',
      #'backend/global_vars.py',
-     #'front-end/src/App.js',
-     #'front-end/src/pages/MainPage.js',
-     'front-end/src/pages/RFPUploadPage.js',
-     #'front-end/src/pages/EmployeeMatchingPage.js',
+     'front-end/src/App.js',
+     'front-end/src/pages/MainPage.js',
+     'front-end/src/pages/RFPAnalyzerPage.js',
+     #'front-end/src/pages/RFPUploadPage.js',
+     #'front-end/src/pages/RequirementsExtractionPage.js',
+     #'front-end/src/pages/ResponseBuilderPage.js',
+
      'front-end/src/components/rfp/RFPListContext.js',
      #'front-end/src/components/rfp/RFPListItem.js',
-     #'front-end/src/components/layout/Layout.js',
-     #'front-end/src/components/layout/Sidebar.js',
-     #'front-end/src/pages/RFPAnalyzerPage.js',
+     'front-end/src/components/layout/Layout.js',
+     'front-end/src/components/layout/Sidebar.js',
+     'front-end/src/pages/RFPAnalyzerPage.js',
      #'front-end/src/pages/RequirementsExtractionPage.js',
      #'front-end/src/pages/AgentMode.js',
      #'front-end/src/pages/CopilotMode.js',
      'front-end/src/components/rfp/RFPSelector.js',
-     'front-end/src/components/rfp/ExperienceSkillsetProfile.js',
-     #'front-end/src/components/rfp/ArtifactDownload.js',
+     #'front-end/src/components/rfp/ExperienceSkillsetProfile.js',
+     #'front-end/src/components/EmployeeMatching/ActionButtons.js',
+    #'front-end/src/components/EmployeeMatching/EnhancedResumes.js',
+    #'front-end/src/components/EmployeeMatching/ResumeViewer.js',
+    #'front-end/src/components/EmployeeMatching/SearchControls.js',
+    #'front-end/src/components/EmployeeMatching/ResultsTable.js',
 ]
 
 # Specify the output file path

@@ -5,6 +5,8 @@ import time
 from azure.cosmos import CosmosClient
 from langchain_openai import AzureChatOpenAI
 import json
+from prompts import content_parsing_prompt
+
 
 load_dotenv()
 
@@ -49,18 +51,11 @@ primary_llm_json = AzureChatOpenAI(
 )
 
 
-extraction_prompt = """
-Analyze the following section of an RFP and extract the requirements. 
-Provide your response in JSON format with two fields:
-1. 'analysis': A brief analysis of the section.
-2. 'output': A list of extracted requirements.
 
-
-"""
 
 def extract_requirements(section_content):
     messages = [
-        {"role": "system", "content": extraction_prompt},
+        {"role": "system", "content": content_parsing_prompt},
         {"role": "user", "content": section_content}
     ]
     response = primary_llm_json.invoke(messages)
