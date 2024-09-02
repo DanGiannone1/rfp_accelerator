@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, ChevronRight, ChevronLeft, Loader } from 'lucide-react';
 import RFPSelector from '../components/rfp/RFPSelector';
+import CurrentRequirementSection from './CurrentRequirementSection';
 import ReactMarkdown from 'react-markdown';
 
 const ResponseBuilderPage = () => {
@@ -94,7 +95,7 @@ const ResponseBuilderPage = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       <div className="text-center mb-8 pt-4">
         <div className="flex justify-center items-center mb-2">
           <FileText className="text-blue-400 mr-2" size={36} />
@@ -116,13 +117,13 @@ const ResponseBuilderPage = () => {
           />
           <div className="bg-gray-800 bg-opacity-50 rounded-xl p-4 shadow-lg">
             <h2 className="text-xl font-semibold mb-3 text-blue-400">
-              What do you want to tell the AI?
+              AI Instructions
             </h2>
             <textarea
               className="w-full h-24 bg-gray-700 bg-opacity-50 rounded-lg p-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={aiInstruction}
               onChange={(e) => setAiInstruction(e.target.value)}
-              placeholder="Enter instructions for the AI..."
+              placeholder="E.g. Emphasize our company's commitments to security"
             ></textarea>
           </div>
         </div>
@@ -142,19 +143,7 @@ const ResponseBuilderPage = () => {
               </div>
             ) : (
               <>
-                <div className="mb-4 bg-gray-700 bg-opacity-50 p-4 rounded-lg">
-                  <h3 className="text-xl font-semibold mb-2 text-blue-400">Current Requirement</h3>
-                  {selectedRFP && requirements[currentRequirement] ? (
-                    <p className="text-white">
-                      <strong>Section Name:</strong> {requirements[currentRequirement].section_name}<br />
-                      <strong>Page Number:</strong> {requirements[currentRequirement].page_number}<br />
-                      <strong>Section Number:</strong> {requirements[currentRequirement].section_number}<br />
-                      <strong>Content:</strong> {requirements[currentRequirement].content}
-                    </p>
-                  ) : (
-                    <p className="text-gray-400">Select an RFP to view requirements</p>
-                  )}
-                </div>
+                <CurrentRequirementSection currentRequirement={selectedRFP && requirements[currentRequirement] ? requirements[currentRequirement] : null} />
                 <div className="flex-1 bg-gray-700 bg-opacity-50 p-4 rounded-lg mb-4 overflow-y-auto">
                   <h3 className="text-xl font-semibold mb-2 text-purple-400">Generated Response</h3>
                   {generatedResponse ? (
