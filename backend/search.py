@@ -1,117 +1,83 @@
+"""
+Search module for RFP-based resume matching.
 
-from azure.search.documents import SearchClient
-from azure.search.documents.indexes import SearchIndexClient
-import concurrent.futures
+This module handles the search and matching of resumes based on RFP requirements using Azure AI Search and Azure OpenAI.
+"""
 
-
-#import lib for pypdf2
-
-
-from azure.core.credentials import AzureKeyCredential  
-from azure.search.documents import SearchClient  
-
-import os  
-from dotenv import load_dotenv  
+# Standard library imports
 import json
-
-from openai import AzureOpenAI  
 import os
-from langchain_openai import AzureChatOpenAI
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Third-party imports
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizedQuery
-from prompts import explanation_prompt, query_prompt, relevant_projects_prompt
+from dotenv import load_dotenv
+from langchain_openai import AzureChatOpenAI
+from openai import AzureOpenAI
+
+# Local imports
 from helper_functions import get_rfp_analysis_from_db
+from prompts import explanation_prompt, query_prompt
 
-from dotenv import load_dotenv 
-
-
+# Load environment variables
 load_dotenv()
 
-connect_str = os.getenv("STORAGE_ACCOUNT_CONNECTION_STRING")
-container_name = "resumes"
-storage_account_name = os.getenv("STORAGE_ACCOUNT_NAME")
+# Azure Cognitive Search configuration
+AI_SEARCH_ENDPOINT = os.environ["AZURE_SEARCH_ENDPOINT"]
+AI_SEARCH_KEY = os.environ["AZURE_SEARCH_KEY"]
+AI_SEARCH_INDEX = os.environ["AZURE_SEARCH_INDEX"]
 
-form_recognizer_endpoint = os.getenv("FORM_RECOGNIZER_ENDPOINT")
-form_recognizer_key = os.getenv("FORM_RECOGNIZER_KEY")
+# Azure OpenAI configuration
+AOAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+AOAI_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AOAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 
-ai_search_endpoint = os.environ["AZURE_SEARCH_ENDPOINT"]
-ai_search_key = os.environ["AZURE_SEARCH_KEY"]
-ai_search_index = os.environ["AZURE_SEARCH_INDEX"]
-
-# Azure OpenAI
-aoai_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
-aoai_key = os.getenv("AZURE_OPENAI_API_KEY")
-aoai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-
-
-
-search_index_client = SearchIndexClient(ai_search_endpoint, AzureKeyCredential(ai_search_key))
-search_client = SearchClient(ai_search_endpoint, ai_search_index, AzureKeyCredential(ai_search_key))
+# Initialize clients
+search_client = SearchClient(AI_SEARCH_ENDPOINT, AI_SEARCH_INDEX, AzureKeyCredential(AI_SEARCH_KEY))
 
 aoai_client = AzureOpenAI(
-        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT"), 
-        api_key=os.getenv("AZURE_OPENAI_KEY"),  
-        api_version="2023-05-15"
-        )
-
-
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_key=os.getenv("AZURE_OPENAI_KEY"),
+    api_version="2023-05-15"
+)
 
 primary_llm = AzureChatOpenAI(
-    azure_deployment=aoai_deployment,
+    azure_deployment=AOAI_DEPLOYMENT,
     api_version="2024-05-01-preview",
     temperature=0,
     max_tokens=None,
     timeout=None,
     max_retries=2,
-    api_key=aoai_key,
-    azure_endpoint=aoai_endpoint
+    api_key=AOAI_KEY,
+    azure_endpoint=AOAI_ENDPOINT
 )
 
 primary_llm_json = AzureChatOpenAI(
-    azure_deployment=aoai_deployment,
+    azure_deployment=AOAI_DEPLOYMENT,
     api_version="2024-05-01-preview",
     temperature=0,
     max_tokens=None,
     timeout=None,
     max_retries=2,
-    api_key=aoai_key,
-    azure_endpoint=aoai_endpoint,
+    api_key=AOAI_KEY,
+    azure_endpoint=AOAI_ENDPOINT,
     model_kwargs={"response_format": {"type": "json_object"}}
 )
 
-
-
-
-def generate_relevant_projects_number(content, skills_and_experience):
-
-    input_text = f"Write-up: {skills_and_experience}\n\nResume: {content}"
-
-    messages = [
-        {"role": "system", "content": relevant_projects_prompt},
-        {"role": "user", "content": input_text}
-    ]
-
-    try:
-        response = primary_llm.invoke(messages)
-        response = response.content
-        print(response)
-
-
-        return response
-    except Exception as e:
-        print(f"Error generating explanation: {str(e)}")
-        return "Unable to generate explanation due to an error."
-
-
-
-
-
 def search(rfp_name, user_input):
-    # Get the necessary skills and experience for this RFP from Cosmos
-    skills_and_experience = get_rfp_analysis_from_db(rfp_name)
-    #print(skills_and_experience)
+    """
+    Perform a search for matching resumes based on RFP requirements and user input.
 
-    # Generate a search query based on the skills and experience
+    Args:
+        rfp_name (str): The name of the RFP document.
+        user_input (str): Additional input from the user to refine the search.
+
+    Returns:
+        list: A list of dictionaries containing formatted search results.
+    """
+    skills_and_experience = get_rfp_analysis_from_db(rfp_name)
     llm_input = f"Write-up: {skills_and_experience}. \n\nAdditional User Input: {user_input}"
     print(llm_input)
 
@@ -122,21 +88,15 @@ def search(rfp_name, user_input):
 
     response = primary_llm_json.invoke(messages)
     data = json.loads(response.content)
-    # Extract values into variables
     search_query = data['search_query']
     filter_value = data['filter']
 
-    # Print the variables to verify
     print("Search Query:", search_query)
     print("Filter:", filter_value)
 
-
-
-    #Vectorize the search query
     query_vector = generate_embeddings(search_query)
     vector_query = VectorizedQuery(vector=query_vector, k_nearest_neighbors=3, fields="searchVector")
 
-    #Run a hybrid search against the index
     results = search_client.search(
         search_text=search_query,
         vector_queries=[vector_query],
@@ -144,15 +104,14 @@ def search(rfp_name, user_input):
         filter=filter_value
     )
 
-    # Use ThreadPoolExecutor for asynchronous explanation and relevant projects generation
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         future_to_result = {executor.submit(generate_explanation, result['content'], skills_and_experience): result for result in results}
         
         formatted_results = []
-        for future in concurrent.futures.as_completed(future_to_result):
+        for future in as_completed(future_to_result):
             result = future_to_result[future]
             try:
-                explanation_data = future.result(timeout=10)  # 10 second timeout
+                explanation_data = future.result(timeout=10)
                 formatted_results.append({
                     "name": result['sourceFileName'],
                     "jobTitle": result['jobTitle'],
@@ -173,6 +132,16 @@ def search(rfp_name, user_input):
     return formatted_results
 
 def generate_explanation(content, skills_and_experience):
+    """
+    Generate an explanation for why a resume matches the RFP requirements.
+
+    Args:
+        content (str): The content of the resume.
+        skills_and_experience (str): The required skills and experience from the RFP.
+
+    Returns:
+        dict: A dictionary containing the explanation and number of relevant projects.
+    """
     input_text = f"Write-up: {skills_and_experience}\n\nResume: {content}"
 
     messages = [
@@ -185,7 +154,6 @@ def generate_explanation(content, skills_and_experience):
         print(response.content)
         response_content = json.loads(response.content)
         
-        # Ensure the response contains both fields
         explanation = response_content.get('explanation', "No explanation provided.")
         relevant_projects = int(response_content.get('relevant_projects', 0))
         
@@ -200,24 +168,19 @@ def generate_explanation(content, skills_and_experience):
             "relevant_projects": 0
         }
 
-def generate_embeddings(text, model="text-embedding-ada-002"): # model = "deployment_name"
-    return aoai_client.embeddings.create(input = [text], model=model).data[0].embedding
+def generate_embeddings(text, model="text-embedding-ada-002"):
+    """
+    Generate embeddings for the given text using Azure OpenAI.
 
+    Args:
+        text (str): The text to generate embeddings for.
+        model (str): The name of the embedding model to use.
 
-
-
-
+    Returns:
+        list: The generated embedding vector.
+    """
+    return aoai_client.embeddings.create(input=[text], model=model).data[0].embedding
 
 if __name__ == "__main__":
-
-    #reset_processed_files()
-
+    # Example usage
     search("rfp_name", "user_input")
-    
-
-    
-    
-
-
-    
-

@@ -1,46 +1,48 @@
-import os
-from dotenv import load_dotenv
-from langchain_openai import AzureChatOpenAI
-from langchain_core.tools import tool
-import azure.cosmos.documents as documents
-import azure.cosmos.cosmos_client as cosmos_client
-import azure.cosmos.exceptions as exceptions
-from azure.cosmos.partition_key import PartitionKey
+"""
+Chat module for RFP-based interactions.
 
+This module handles chat interactions related to RFP documents, using Azure OpenAI
+for natural language processing and Azure Cosmos DB for data storage and retrieval.
+"""
+
+# Standard library imports
+import os
+
+# Third-party imports
+from azure.cosmos import CosmosClient, exceptions
+from dotenv import load_dotenv
+from langchain_core.tools import tool
+from langchain_openai import AzureChatOpenAI
+
+# Load environment variables
 load_dotenv()
 
+# Azure Cosmos DB configuration
 COSMOS_HOST = os.getenv('COSMOS_HOST')
 COSMOS_MASTER_KEY = os.getenv('COSMOS_MASTER_KEY')
 COSMOS_DATABASE_ID = os.getenv('COSMOS_DATABASE_ID')
 COSMOS_CONTAINER_ID = os.getenv('COSMOS_CONTAINER_ID')
 
-aoai_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
-aoai_key = os.getenv("AZURE_OPENAI_API_KEY")
-aoai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+# Azure OpenAI configuration
+AOAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+AOAI_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AOAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 
+# Initialize Azure OpenAI client
 primary_llm = AzureChatOpenAI(
-    azure_deployment=aoai_deployment,
+    azure_deployment=AOAI_DEPLOYMENT,
     api_version="2024-05-01-preview",
     temperature=0,
     max_tokens=None,
     timeout=None,
     max_retries=2,
-    api_key=aoai_key,
-    azure_endpoint=aoai_endpoint
+    api_key=AOAI_KEY,
+    azure_endpoint=AOAI_ENDPOINT
 )
 
+# Define tools for the LLM
+#TO DO: build the 'search' tool to run a hybrid search over the RFP chunks
 tools = [
-    {
-        "name": "search",
-        "description": "search the RFP for information. Use this tool when a user asks a question that is not specific to a particular section, but rather a general question about the RFP.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "search_query": {"type": "string", "description": "The search query to use"}
-            },
-            "required": ["search_query"]
-        }
-    },
     {
         "name": "get_sections",
         "description": "Pull specific sections from the database. Use this tool when a user asks a question that is specific to a particular section or sections",
@@ -64,19 +66,26 @@ tools = [
 
 llm_with_tools = primary_llm.bind_tools(tools)
 
-client = cosmos_client.CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
+# Initialize Cosmos DB client
 try:
+    client = CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
     db = client.get_database_client(COSMOS_DATABASE_ID)
     container = db.get_container_client(COSMOS_CONTAINER_ID)
 except exceptions.CosmosHttpResponseError as e:
-    print('\nrun_sample has caught an error. {0}'.format(e.message))
+    print(f'Error initializing Cosmos DB client: {e.message}')
 
 @tool
 def get_full_rfp(rfp_name):
-    """Get the full RFP from CosmosDB"""
-    files = []
+    """
+    Get the full RFP from CosmosDB.
+
+    Args:
+        rfp_name (str): The name of the RFP document.
+
+    Returns:
+        str: The full content of the RFP.
+    """
     partition_key = rfp_name
-    print(partition_key)
     context = ""
     try:
         print(f"Fetching files from CosmosDB for partitionKey: {partition_key}")
@@ -84,9 +93,7 @@ def get_full_rfp(rfp_name):
         items = list(container.query_items(query=query, enable_cross_partition_query=True))
         print(f"Found {len(items)} files in CosmosDB for partitionKey: {partition_key} with section_content")
         for item in items:
-            files.append(item)
-        for file in files:
-            context += file['section_content']
+            context += item['section_content']
         return context
     except exceptions.CosmosHttpResponseError as e:
         print(f"Error reading from CosmosDB: {e.message}")
@@ -97,7 +104,16 @@ def get_full_rfp(rfp_name):
 
 @tool
 def get_sections(sections, rfp_name):
-    """Get 1 or more sections from CosmosDB"""
+    """
+    Get one or more sections from CosmosDB.
+
+    Args:
+        sections (str): The sections to retrieve.
+        rfp_name (str): The name of the RFP document.
+
+    Returns:
+        str: The content of the requested sections.
+    """
     partition_key = rfp_name
     context = ""
     try:
@@ -116,6 +132,19 @@ def get_sections(sections, rfp_name):
     return context
 
 def run_interaction(user_message, rfp_name):
+    """
+    Run a chat interaction based on the user's message and the RFP.
+
+    Args:
+        user_message (str): The user's input message.
+        rfp_name (str): The name of the RFP document.
+
+    Yields:
+        str: Chunks of the AI's response.
+
+    Returns:
+        str: A success message.
+    """
     context = ""
 
     messages = [
@@ -152,4 +181,3 @@ def run_interaction(user_message, rfp_name):
         yield chunk.content
 
     return "success"
-
