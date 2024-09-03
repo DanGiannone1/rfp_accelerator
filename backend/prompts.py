@@ -230,7 +230,7 @@ Assistant: 7
 
 
 
-section_validator_prompt = """Your job is to take a user input, which a table of contents and a section heading, and output whether the section heading is valid or not. 
+section_validator_prompt_with_toc = """Your job is to take a user input, which a table of contents and a section heading, and output whether the section heading is valid or not. 
 Answer yes or no depending on what you see in the table of contents. Guidance:
 
 1. If you see the section directly in the table of contents, output 'yes'
@@ -288,7 +288,7 @@ Assistant: {\n  \"thought_process\": \"I see section 4 in the table of contents.
 """
 
 
-section_validator_prompt_v2 = """Your job is to take a section heading from an RFP document, and output whether you think that the section heading is valid or not. Sometimes the certain text is incorrectly identified as a section heading and we need to pinpoint that.
+section_validator_prompt = """Your job is to take a section heading from an RFP document, and output whether you think that the section heading is valid or not. Sometimes the certain text is incorrectly identified as a section heading and we need to pinpoint that.
 Answer yes or no depending on your intuition and knowledge of RFP structures.
 
 1. If you think the section heading is valid, output 'yes'
@@ -325,7 +325,7 @@ Assistant: {\n  \"thought_process\": \"Despite the typo, "Part 1 - General infor
 """
 
 
-skills_and_experience_prompt = """You are an RFP analyst. Your job is to read the input RFP, and output the most important skills and experience that someone would need to be successful at executing the project in markdown format.
+overview_prompt = """You are an RFP analyst. Your job is to read the input RFP, and output the most important skills and experience that someone would need to be successful at executing the project in markdown format.
 
 #Output Formatting#
 

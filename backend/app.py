@@ -1,40 +1,103 @@
-from flask import Flask, request, jsonify, make_response
-from flask_cors import CORS
-from azure.cosmos import CosmosClient, exceptions, PartitionKey
-from upload import process_rfp
-from extraction import start_extraction_thread
-from global_vars import get_all_rfps, clear_completed_uploads
-from extraction import start_extraction_thread, get_extraction_progress
-import os
-from dotenv import load_dotenv
-from helper_functions import get_rfp_analysis_from_db
-from search import search
-from azure.storage.blob import BlobServiceClient
-from chat import run_interaction
-from response import respond_to_requirement
+"""
+Flask application for RFP processing and analysis.
 
+This application provides various endpoints for uploading, processing, and analyzing
+Request for Proposal (RFP) documents. It integrates with Azure Cosmos DB, Azure AI Search, Azure Document Intelligence, and Azure OpenAI.
+"""
+
+# Standard library imports
+import json
+import os
+
+# Third-party imports
+from azure.cosmos import CosmosClient, exceptions
+from azure.cosmos.partition_key import PartitionKey
+from azure.storage.blob import BlobServiceClient
+from dotenv import load_dotenv
+from flask import Flask, Response, jsonify, make_response, request
+from flask_cors import CORS
+from langchain_openai import AzureChatOpenAI
+
+# Local imports
+from chat import run_interaction
+from extraction import get_extraction_progress, start_extraction_thread
+from global_vars import get_all_rfps
+from helper_functions import get_rfp_analysis_from_db
+from response import respond_to_requirement
+from search import search
+from upload import process_rfp
+
+# Load environment variables
 load_dotenv()
 
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
+# Azure Cosmos DB configuration
 COSMOS_HOST = os.getenv('COSMOS_HOST')
 COSMOS_MASTER_KEY = os.getenv('COSMOS_MASTER_KEY')
 COSMOS_DATABASE_ID = os.getenv('COSMOS_DATABASE_ID')
 COSMOS_CONTAINER_ID = os.getenv('COSMOS_CONTAINER_ID')
 
+# Azure Blob Storage configuration
 STORAGE_ACCOUNT_CONNECTION_STRING = os.getenv("STORAGE_ACCOUNT_CONNECTION_STRING")
 STORAGE_ACCOUNT_CONTAINER = os.getenv("STORAGE_ACCOUNT_CONTAINER")
 STORAGE_ACCOUNT_RESUME_CONTAINER = os.getenv("STORAGE_ACCOUNT_RESUME_CONTAINER")
+
+# Azure OpenAI configuration
+AOAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+AOAI_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AOAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+
+# Initialize Azure clients
 blob_service_client = BlobServiceClient.from_connection_string(STORAGE_ACCOUNT_CONNECTION_STRING)
 blob_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_CONTAINER)
 blob_resume_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_RESUME_CONTAINER)
 
+cosmos_client = CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
 
+# Initialize Cosmos DB database and container
+try:
+    db = cosmos_client.create_database(id=COSMOS_DATABASE_ID)
+    print(f'Database with id \'{COSMOS_DATABASE_ID}\' created')
+except exceptions.CosmosResourceExistsError:
+    db = cosmos_client.get_database_client(COSMOS_DATABASE_ID)
+    print(f'Database with id \'{COSMOS_DATABASE_ID}\' was found')
+
+try:
+    container = db.create_container(id=COSMOS_CONTAINER_ID, partition_key=PartitionKey(path='/partitionKey'))
+    print(f'Container with id \'{COSMOS_CONTAINER_ID}\' created')
+except exceptions.CosmosResourceExistsError:
+    container = db.get_container_client(COSMOS_CONTAINER_ID)
+    print(f'Container with id \'{COSMOS_CONTAINER_ID}\' was found')
+
+# Global variables
 selected_rfp = None
 
+# Helper functions
+def get_rfps_from_cosmos():
+    """Fetch RFPs from Cosmos DB."""
+    try:
+        query = "SELECT DISTINCT c.partitionKey FROM c"
+        items = list(container.query_items(query=query, enable_cross_partition_query=True))
+        return [{"name": docs['partitionKey'], "status": 'Complete'} for docs in items]
+    except Exception as e:
+        print(f"Error reading from CosmosDB: {str(e)}")
+        return []
+
+def get_rfps_from_blob_storage():
+    """Fetch RFPs from Azure Blob Storage."""
+    rfps = []
+    blobs = blob_container_client.list_blobs()
+    for blob in blobs:
+        rfps.append({"name": blob.name, "status": "Complete"})
+    return rfps
+
+# Routes
 @app.route('/select-rfp', methods=['POST'])
 def select_rfp():
+    """Select an RFP for processing."""
     global selected_rfp
     data = request.json
     selected_rfp = data.get('rfp_name')
@@ -43,111 +106,22 @@ def select_rfp():
     else:
         return jsonify({"error": "No RFP name provided"}), 400
 
-def get_rfps_from_cosmos():
-    client = CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
-    try:
-        db = client.get_database_client(COSMOS_DATABASE_ID)
-        container = db.get_container_client(COSMOS_CONTAINER_ID)
-        
-        query = "SELECT DISTINCT c.partitionKey FROM c"
-        items = list(container.query_items(query=query, enable_cross_partition_query=True))
-        
-        return [{"name": docs['partitionKey'], "status": 'Complete'} for docs in items]
-    except Exception as e:
-        print(f"Error reading from CosmosDB: {str(e)}")
-        return []
-
-# @app.route('/upload', methods=['POST'])
-# def upload_file():
-#     if 'file' not in request.files:
-#         return jsonify({"error": "No file part"}), 400
-#     file = request.files['file']
-#     if file.filename == '':
-#         return jsonify({"error": "No selected file"}), 400
-    
-#     start_upload_process(file)
-    
-#     return jsonify({"message": "RFP Ingestion process started. This can take anywhere from 2 to 15 minutes."}), 202
-
 @app.route('/available-rfps', methods=['GET'])
 def get_rfps():
+    """Get a list of available RFPs."""
     cosmos_rfps = get_rfps_from_cosmos()
     in_memory_rfps = get_all_rfps()
-    
-    # Combine and deduplicate RFPs
     all_rfps = {rfp['name']: rfp for rfp in cosmos_rfps + in_memory_rfps}
-    
     return jsonify(list(all_rfps.values()))
 
 @app.route('/in-progress-rfps', methods=['GET'])
 def get_in_progress_rfps():
+    """Get a list of RFPs currently being processed."""
     return jsonify(get_all_rfps())
-
-from flask import Flask, Response, request, render_template
-import json
-import os
-from langchain_openai import AzureChatOpenAI
-from langchain_core.tools import tool
-
-import azure.cosmos.documents as documents
-import azure.cosmos.cosmos_client as cosmos_client
-import azure.cosmos.exceptions as exceptions
-from azure.cosmos.partition_key import PartitionKey
-
-
-
-
-aoai_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
-aoai_key = os.getenv("AZURE_OPENAI_API_KEY")
-aoai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-
-
-
-
-client = cosmos_client.CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
-try:
-        # setup database for this sample
-        try:
-            db = client.create_database(id=COSMOS_DATABASE_ID)
-            print('Database with id \'{0}\' created'.format(COSMOS_DATABASE_ID))
-
-        except exceptions.CosmosResourceExistsError:
-            db = client.get_database_client(COSMOS_DATABASE_ID)
-            print('Database with id \'{0}\' was found'.format(COSMOS_DATABASE_ID))
-
-        try:
-                container = db.create_container(id=COSMOS_CONTAINER_ID, partition_key=PartitionKey(path='/partitionKey'))
-                print('Container with id \'{0}\' created'.format(COSMOS_CONTAINER_ID))
-
-        except exceptions.CosmosResourceExistsError:
-                container = db.get_container_client(COSMOS_CONTAINER_ID)
-                print('Container with id \'{0}\' was found'.format(COSMOS_CONTAINER_ID))
-except exceptions.CosmosHttpResponseError as e:
-        print('\nrun_sample has caught an error. {0}'.format(e.message))
-
-
-
-
-@app.route('/chat', methods=['POST'])
-def run():
-    data = request.json
-    user_message = data['message']
-    rfp_name = data['rfp_name']
-    print(f"User Message: {user_message}, RFP Name: {rfp_name}")
-    return Response(run_interaction(user_message, rfp_name), mimetype='text/event-stream')
-
-
-
-
-def get_rfps_from_blob_storage():
-    rfps = []
-    blobs = blob_container_client.list_blobs()
-    for blob in blobs:
-        rfps.append({"name": blob.name, "status": "Complete"})
-    return rfps
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    """Upload and process an RFP file."""
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
     file = request.files['file']
@@ -160,8 +134,18 @@ def upload_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/chat', methods=['POST'])
+def run():
+    """Handle chat interactions."""
+    data = request.json
+    user_message = data['message']
+    rfp_name = data['rfp_name']
+    print(f"User Message: {user_message}, RFP Name: {rfp_name}")
+    return Response(run_interaction(user_message, rfp_name), mimetype='text/event-stream')
+
 @app.route('/get-rfp-sections', methods=['GET'])
 def get_rfp_sections():
+    """Get sections of a specific RFP."""
     rfp_name = request.args.get('rfp_name')
     if not rfp_name:
         return jsonify({"error": "RFP name is required"}), 400
@@ -178,7 +162,6 @@ def get_rfp_sections():
             section_id = item.get('section_id')
             section_content = item.get('section_content')
             
-            # Only add to sections if both section_id and section_content are present
             if section_id and section_content:
                 section = {
                     "section_id": section_id,
@@ -199,8 +182,6 @@ def get_rfp_sections():
                 
                 sections.append(section)
         
-        for section in sections:
-            print(section)
         return jsonify({"sections": sections}), 200
     except Exception as e:
         print(f"Error fetching RFP sections: {str(e)}")
@@ -208,6 +189,7 @@ def get_rfp_sections():
 
 @app.route('/get-requirements', methods=['GET'])
 def get_requirements():
+    """Get requirements for a specific RFP."""
     rfp_name = request.args.get('rfp_name')
     if not rfp_name:
         return jsonify({"error": "RFP name is required"}), 400
@@ -230,13 +212,9 @@ def get_requirements():
         print(f"Error fetching requirements: {str(e)}")
         return jsonify({"error": "An error occurred while fetching requirements"}), 500
 
-    
-def generate_dummy_response(requirement):
-    return f"This is a dummy response for the requirement: '{requirement}'. In a real scenario, this would be generated by an AI model based on the RFP context and any additional instructions provided."
-
-
 @app.route('/update-requirements', methods=['POST'])
 def update_requirements():
+    """Update requirements for a specific RFP section."""
     data = request.json
     rfp_name = data.get('rfp_name')
     section_id = data.get('section_id')
@@ -246,26 +224,19 @@ def update_requirements():
         return jsonify({"error": "Missing required data"}), 400
 
     try:
-        # Setup the database client
-        client = CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY})
-        database = client.get_database_client(COSMOS_DATABASE_ID)
-        container = database.get_container_client(COSMOS_CONTAINER_ID)
-
-        # Query for the specific document
         query = f"SELECT * FROM c WHERE c.partitionKey = '{rfp_name}' AND c.section_id = '{section_id}'"
         items = list(container.query_items(query=query, enable_cross_partition_query=True))
 
         if not items:
             return jsonify({"error": "Section not found"}), 404
 
-        # Update the document
         doc = items[0]
         doc['requirements'] = requirements
+        doc['reviewed'] = True
 
-        # Replace the document in the database
         container.replace_item(item=doc, body=doc)
 
-        return jsonify({"message": "Requirements updated successfully"}), 200
+        return jsonify({"message": "Requirements updated and section marked as reviewed"}), 200
 
     except exceptions.CosmosHttpResponseError as e:
         print(f"An error occurred: {e.message}")
@@ -273,6 +244,7 @@ def update_requirements():
 
 @app.route('/respond-to-requirement', methods=['POST'])
 def response_to_requirement():
+    """Generate a response to a specific requirement."""
     data = request.json
     requirement = data.get('requirement')
     user_message = data.get('user_message', '')
@@ -286,8 +258,38 @@ def response_to_requirement():
         print(f"Error generating response: {str(e)}")
         return jsonify({"error": "An error occurred while generating the response"}), 500
 
+@app.route('/progress', methods=['GET'])
+def get_progress():
+    """Get progress of RFP processing."""
+    rfp_name = request.args.get('rfp_name')
+    
+    if not rfp_name:
+        return jsonify({"error": "No RFP name provided"}), 400
+    
+    try:
+        total_query = f"SELECT VALUE COUNT(1) FROM c WHERE c.partitionKey = '{rfp_name}' AND IS_DEFINED(c.section_content)"
+        extracted_query = f"SELECT VALUE COUNT(1) FROM c WHERE c.partitionKey = '{rfp_name}' AND IS_DEFINED(c.requirements) AND IS_DEFINED(c.section_content)"
+        reviewed_query = f"SELECT VALUE COUNT(1) FROM c WHERE c.partitionKey = '{rfp_name}' AND c.reviewed = true AND IS_DEFINED(c.section_content)"
+
+        total_count = list(container.query_items(query=total_query, enable_cross_partition_query=True))[0]
+        extracted_count = list(container.query_items(query=extracted_query, enable_cross_partition_query=True))[0]
+        reviewed_count = list(container.query_items(query=reviewed_query, enable_cross_partition_query=True))[0]
+
+        extraction_progress = (extracted_count / total_count) * 100 if total_count > 0 else 0
+        review_progress = (reviewed_count / total_count) * 100 if total_count > 0 else 0
+
+        return jsonify({
+            "extraction_progress": extraction_progress,
+            "review_progress": review_progress
+        }), 200
+
+    except Exception as e:
+        print(f"Error fetching progress: {str(e)}")
+        return jsonify({"error": "An error occurred while fetching progress"}), 500
+
 @app.route('/get-rfp-analysis', methods=['GET'])
 def get_rfp_analysis():
+    """Get analysis for a specific RFP."""
     rfp_name = request.args.get('rfp_name')
     result = get_rfp_analysis_from_db(rfp_name)
     
@@ -300,9 +302,9 @@ def get_rfp_analysis():
     else:
         return jsonify({"skills_and_experience": result}), 200
 
-
 @app.route('/search', methods=['POST'])
 def search_employees():
+    """Search for employees based on RFP requirements."""
     data = request.json
     rfp_name = data.get('rfpName')
     feedback = data.get('feedback')
@@ -317,10 +319,9 @@ def search_employees():
         print(f"Error during search: {str(e)}")
         return jsonify({"error": "An error occurred during the search"}), 500
 
-
-
 @app.route('/resume', methods=['GET'])
 def get_resume():
+    """Get a resume PDF file."""
     resume_name = request.args.get('resumeName')[:-4] + 'pdf'
   
     blob_client = blob_resume_container_client.get_blob_client('pdf/' + resume_name)

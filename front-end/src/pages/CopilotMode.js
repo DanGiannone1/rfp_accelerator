@@ -45,19 +45,25 @@ const RequirementCard = ({ requirement, onToggle }) => {
   );
 };
 
-const CopilotMode = ({ selectedRFP, currentSection, onApproveSection }) => {
+const CopilotMode = ({ selectedRFP, currentSection, onApproveSection, extractionProgress, reviewProgress, onUpdateProgress }) => {
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [updateSuccess, setUpdateSuccess] = useState(false);
   const [showSuccessIndicator, setShowSuccessIndicator] = useState(false);
+  const [isSectionReviewed, setIsSectionReviewed] = useState(false);
 
   useEffect(() => {
     if (selectedRFP) {
       fetchSections(selectedRFP);
     }
   }, [selectedRFP]);
+
+  useEffect(() => {
+    if (sections[currentSection]) {
+      setIsSectionReviewed(sections[currentSection].reviewed || false);
+    }
+  }, [currentSection, sections]);
 
   const fetchSections = async (rfpName) => {
     setLoading(true);
@@ -69,7 +75,6 @@ const CopilotMode = ({ selectedRFP, currentSection, onApproveSection }) => {
       }
       const data = await response.json();
       setSections(data.sections);
-      // Automatically set the current section to 0 (first section) when data is loaded
       onApproveSection(0);
     } catch (err) {
       setError(err.message);
@@ -91,7 +96,6 @@ const CopilotMode = ({ selectedRFP, currentSection, onApproveSection }) => {
 
   const handleApproveAndContinue = async () => {
     setIsUpdating(true);
-    setUpdateSuccess(false);
     try {
       const updatedRequirements = {
         analysis: "Requirements updated by user",
@@ -120,26 +124,30 @@ const CopilotMode = ({ selectedRFP, currentSection, onApproveSection }) => {
         throw new Error('Failed to update requirements');
       }
 
-      setUpdateSuccess(true);
-      
-      // Immediately move to the next section
-      onApproveSection(currentSection + 1);
-      
-      // Show success indicator
+      // Fetch updated progress
+      await onUpdateProgress();
+
       setShowSuccessIndicator(true);
-      
-      // Hide success indicator after 2 seconds
       setTimeout(() => {
         setShowSuccessIndicator(false);
       }, 5000);
+
+      // Mark the current section as reviewed
+      setSections(prevSections => {
+        const newSections = [...prevSections];
+        newSections[currentSection] = {...newSections[currentSection], reviewed: true};
+        return newSections;
+      });
+      setIsSectionReviewed(true);
+
+      // Move to the next section
+      onApproveSection(currentSection + 1);
     } catch (err) {
       setError(err.message);
     } finally {
       setIsUpdating(false);
     }
   };
-
-
 
   const handlePreviousSection = () => {
     if (currentSection > 0) {
@@ -204,6 +212,11 @@ const CopilotMode = ({ selectedRFP, currentSection, onApproveSection }) => {
             <>
               <CheckCircle className="text-green-500 mr-2" size={20} />
               <span className="text-green-300 text-sm">Previous section updated successfully!</span>
+            </>
+          ) : isSectionReviewed ? (
+            <>
+              <CheckCircle className="text-green-500 mr-2" size={20} />
+              <span className="text-green-300 text-sm">Section Validated</span>
             </>
           ) : (
             <>
