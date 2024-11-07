@@ -1,4 +1,6 @@
 """
+###app.py###
+
 Flask application for RFP processing and analysis.
 
 This application provides various endpoints for uploading, processing, and analyzing
@@ -6,26 +8,24 @@ Request for Proposal (RFP) documents. It integrates with Azure Cosmos DB, Azure 
 """
 
 # Standard library imports
-import json
 import os
 
 # Third-party imports
-from azure.cosmos import CosmosClient, exceptions
-from azure.cosmos.partition_key import PartitionKey
 from azure.storage.blob import BlobServiceClient
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, make_response, request
 from flask_cors import CORS
-from langchain_openai import AzureChatOpenAI
 
 # Local imports
 from chat import run_interaction
 from extraction import get_extraction_progress, start_extraction_thread
 from global_vars import get_all_rfps
-from helper_functions import get_rfp_analysis_from_db
 from response import respond_to_requirement
 from search import search
 from upload import process_rfp
+from common.cosmosdb import CosmosDBManager
+
+
 
 # Load environment variables
 load_dotenv()
@@ -34,11 +34,8 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# Azure Cosmos DB configuration
-COSMOS_HOST = os.getenv('COSMOS_HOST')
-COSMOS_MASTER_KEY = os.getenv('COSMOS_MASTER_KEY')
-COSMOS_DATABASE_ID = os.getenv('COSMOS_DATABASE_ID')
-COSMOS_CONTAINER_ID = os.getenv('COSMOS_CONTAINER_ID')
+
+
 
 # Azure Blob Storage configuration
 STORAGE_ACCOUNT_CONNECTION_STRING = os.getenv("STORAGE_ACCOUNT_CONNECTION_STRING")
@@ -55,22 +52,10 @@ blob_service_client = BlobServiceClient.from_connection_string(STORAGE_ACCOUNT_C
 blob_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_CONTAINER)
 blob_resume_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_RESUME_CONTAINER)
 
-cosmos_client = CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
 
-# Initialize Cosmos DB database and container
-try:
-    db = cosmos_client.create_database(id=COSMOS_DATABASE_ID)
-    print(f'Database with id \'{COSMOS_DATABASE_ID}\' created')
-except exceptions.CosmosResourceExistsError:
-    db = cosmos_client.get_database_client(COSMOS_DATABASE_ID)
-    print(f'Database with id \'{COSMOS_DATABASE_ID}\' was found')
 
-try:
-    container = db.create_container(id=COSMOS_CONTAINER_ID, partition_key=PartitionKey(path='/partitionKey'))
-    print(f'Container with id \'{COSMOS_CONTAINER_ID}\' created')
-except exceptions.CosmosResourceExistsError:
-    container = db.get_container_client(COSMOS_CONTAINER_ID)
-    print(f'Container with id \'{COSMOS_CONTAINER_ID}\' was found')
+cosmos_manager = CosmosDBManager()
+
 
 # Global variables
 selected_rfp = None
@@ -80,7 +65,7 @@ def get_rfps_from_cosmos():
     """Fetch RFPs from Cosmos DB."""
     try:
         query = "SELECT DISTINCT c.partitionKey FROM c"
-        items = list(container.query_items(query=query, enable_cross_partition_query=True))
+        items = cosmos_manager.query_items(query)
         return [{"name": docs['partitionKey'], "status": 'Complete'} for docs in items]
     except Exception as e:
         print(f"Error reading from CosmosDB: {str(e)}")
@@ -152,7 +137,7 @@ def get_rfp_sections():
 
     try:
         query = f"SELECT * FROM c WHERE c.partitionKey = '{rfp_name}'"
-        items = list(container.query_items(query=query, enable_cross_partition_query=True))
+        items = cosmos_manager.query_items(query)
         
         if not items:
             return jsonify({"error": "No sections found for the specified RFP"}), 404
@@ -196,7 +181,7 @@ def get_requirements():
 
     try:
         query = f"SELECT c.requirements.output FROM c WHERE c.partitionKey = '{rfp_name}'"
-        items = list(container.query_items(query=query, enable_cross_partition_query=True))
+        items = cosmos_manager.query_items(query)
         
         if not items:
             return jsonify({"error": "No requirements found for the specified RFP"}), 404
@@ -225,7 +210,7 @@ def update_requirements():
 
     try:
         query = f"SELECT * FROM c WHERE c.partitionKey = '{rfp_name}' AND c.section_id = '{section_id}'"
-        items = list(container.query_items(query=query, enable_cross_partition_query=True))
+        items = cosmos_manager.query_items(query)
 
         if not items:
             return jsonify({"error": "Section not found"}), 404
@@ -234,12 +219,12 @@ def update_requirements():
         doc['requirements'] = requirements
         doc['reviewed'] = True
 
-        container.replace_item(item=doc, body=doc)
+        cosmos_manager.update_item(doc['id'], doc, doc['partitionKey'])
 
         return jsonify({"message": "Requirements updated and section marked as reviewed"}), 200
 
-    except exceptions.CosmosHttpResponseError as e:
-        print(f"An error occurred: {e.message}")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
         return jsonify({"error": "An error occurred while updating the database"}), 500
 
 @app.route('/respond-to-requirement', methods=['POST'])
@@ -271,9 +256,9 @@ def get_progress():
         extracted_query = f"SELECT VALUE COUNT(1) FROM c WHERE c.partitionKey = '{rfp_name}' AND IS_DEFINED(c.requirements) AND IS_DEFINED(c.section_content)"
         reviewed_query = f"SELECT VALUE COUNT(1) FROM c WHERE c.partitionKey = '{rfp_name}' AND c.reviewed = true AND IS_DEFINED(c.section_content)"
 
-        total_count = list(container.query_items(query=total_query, enable_cross_partition_query=True))[0]
-        extracted_count = list(container.query_items(query=extracted_query, enable_cross_partition_query=True))[0]
-        reviewed_count = list(container.query_items(query=reviewed_query, enable_cross_partition_query=True))[0]
+        total_count = cosmos_manager.query_items(total_query)[0]
+        extracted_count = cosmos_manager.query_items(extracted_query)[0]
+        reviewed_count = cosmos_manager.query_items(reviewed_query)[0]
 
         extraction_progress = (extracted_count / total_count) * 100 if total_count > 0 else 0
         review_progress = (reviewed_count / total_count) * 100 if total_count > 0 else 0
@@ -291,16 +276,25 @@ def get_progress():
 def get_rfp_analysis():
     """Get analysis for a specific RFP."""
     rfp_name = request.args.get('rfp_name')
-    result = get_rfp_analysis_from_db(rfp_name)
     
-    if result == "RFP name is required":
-        return jsonify({"error": result}), 400
-    elif result == "RFP analysis not found":
-        return jsonify({"error": result}), 404
-    elif result.startswith("An error occurred"):
-        return jsonify({"error": result}), 500
-    else:
-        return jsonify({"skills_and_experience": result}), 200
+    if not rfp_name:
+        return jsonify({"error": "RFP name is required"}), 400
+    
+    try:
+        query = "SELECT c.skills_and_experience FROM c WHERE c.partitionKey = @rfp_name"
+        print("Query:", query)
+
+        parameters = [{"name": "@rfp_name", "value": rfp_name}]
+        items = cosmos_manager.query_items(query, parameters)
+        for item in items:
+            print(item)
+            if 'skills_and_experience' in item:
+                return jsonify({"skills_and_experience": item['skills_and_experience']}), 200
+
+        return jsonify({"error": "RFP analysis not found"}), 404
+    except Exception as e:
+        print(f"Error querying CosmosDB: {str(e)}")
+        return jsonify({"error": "An error occurred while fetching RFP analysis"}), 500
 
 @app.route('/search', methods=['POST'])
 def search_employees():

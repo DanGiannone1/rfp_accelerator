@@ -1,6 +1,6 @@
 
-python-dotenv
-azure-storage-blob
+python-dotenv==1.0.1
+azure-storage-blob==12.22.0
 azure-ai-documentintelligence==1.0.0b2
 azure-cosmos==4.5.1
 azure-search-documents==11.4.0
@@ -8,8 +8,10 @@ azure-ai-formrecognizer==3.3.1
 azure-eventhub==5.11.4
 azure-storage-file-datalake==12.14.0
 openai==1.35.13
-Flask
-flask-cors
-langchain
+Flask==3.0.3
+flask-cors==4.0.1
+langchain==0.2.13
 langchain-openai==0.1.15
-azure-identity
+azure-identity==1.17.1
+gunicorn==21.2.0
+flask-limiter==3.5.0

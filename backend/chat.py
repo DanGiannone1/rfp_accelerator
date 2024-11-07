@@ -9,7 +9,7 @@ for natural language processing and Azure Cosmos DB for data storage and retriev
 import os
 
 # Third-party imports
-from azure.cosmos import CosmosClient, exceptions
+from common.cosmosdb import CosmosDBManager
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_openai import AzureChatOpenAI
@@ -66,13 +66,7 @@ tools = [
 
 llm_with_tools = primary_llm.bind_tools(tools)
 
-# Initialize Cosmos DB client
-try:
-    client = CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
-    db = client.get_database_client(COSMOS_DATABASE_ID)
-    container = db.get_container_client(COSMOS_CONTAINER_ID)
-except exceptions.CosmosHttpResponseError as e:
-    print(f'Error initializing Cosmos DB client: {e.message}')
+cosmos_manager = CosmosDBManager()
 
 @tool
 def get_full_rfp(rfp_name):
@@ -85,18 +79,15 @@ def get_full_rfp(rfp_name):
     Returns:
         str: The full content of the RFP.
     """
-    partition_key = rfp_name
     context = ""
     try:
-        print(f"Fetching files from CosmosDB for partitionKey: {partition_key}")
-        query = f"SELECT * FROM c WHERE c.partitionKey = '{partition_key}' AND IS_DEFINED(c.section_content)"
-        items = list(container.query_items(query=query, enable_cross_partition_query=True))
-        print(f"Found {len(items)} files in CosmosDB for partitionKey: {partition_key} with section_content")
+        print(f"Fetching files from CosmosDB for partitionKey: {rfp_name}")
+        query = f"SELECT * FROM c WHERE c.partitionKey = '{rfp_name}' AND IS_DEFINED(c.section_content)"
+        items = cosmos_manager.query_items(query)
+        print(f"Found {len(items)} files in CosmosDB for partitionKey: {rfp_name} with section_content")
         for item in items:
             context += item['section_content']
         return context
-    except exceptions.CosmosHttpResponseError as e:
-        print(f"Error reading from CosmosDB: {e.message}")
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
     
@@ -114,18 +105,15 @@ def get_sections(sections, rfp_name):
     Returns:
         str: The content of the requested sections.
     """
-    partition_key = rfp_name
     context = ""
     try:
-        print(f"Fetching sections from CosmosDB for partitionKey: {partition_key} and sections: {sections}")
-        query = f"SELECT * FROM c WHERE c.partitionKey = '{partition_key}' AND CONTAINS(c.section_id, '{sections}')"
-        items = list(container.query_items(query=query, enable_cross_partition_query=True))
-        print(f"Found {len(items)} sections in CosmosDB for partitionKey: {partition_key} with section_header containing '{sections}'")
+        print(f"Fetching sections from CosmosDB for partitionKey: {rfp_name} and sections: {sections}")
+        query = f"SELECT * FROM c WHERE c.partitionKey = '{rfp_name}' AND CONTAINS(c.section_id, '{sections}')"
+        items = cosmos_manager.query_items(query)
+        print(f"Found {len(items)} sections in CosmosDB for partitionKey: {rfp_name} with section_header containing '{sections}'")
         for item in items:
             context += item['section_content']
         return context
-    except exceptions.CosmosHttpResponseError as e:
-        print(f"Error reading from CosmosDB: {e.message}")
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 

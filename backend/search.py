@@ -18,7 +18,7 @@ from langchain_openai import AzureChatOpenAI
 from openai import AzureOpenAI
 
 # Local imports
-from helper_functions import get_rfp_analysis_from_db
+from common.cosmosdb import CosmosDBManager
 from prompts import explanation_prompt, query_prompt
 
 # Load environment variables
@@ -66,6 +66,33 @@ primary_llm_json = AzureChatOpenAI(
     model_kwargs={"response_format": {"type": "json_object"}}
 )
 
+cosmos_manager = CosmosDBManager()
+
+def get_rfp_analysis(rfp_name):
+    """
+    Retrieve RFP analysis from Cosmos DB using CosmosDBManager.
+
+    Args:
+        rfp_name (str): The name of the RFP document.
+
+    Returns:
+        str: The skills and experience requirements from the RFP analysis.
+    """
+    try:
+        query = "SELECT c.skills_and_experience FROM c WHERE c.partitionKey = @partitionKey"
+        parameters = [{"name": "@partitionKey", "value": rfp_name}]
+        
+        items = cosmos_manager.query_items(query, parameters)
+        
+        for item in items:
+            if 'skills_and_experience' in item:
+                return item['skills_and_experience']
+        
+        return "RFP analysis not found"
+    except Exception as e:
+        print(f"Error retrieving RFP analysis: {str(e)}")
+        return "An error occurred while fetching RFP analysis"
+
 def search(rfp_name, user_input):
     """
     Perform a search for matching resumes based on RFP requirements and user input.
@@ -77,7 +104,7 @@ def search(rfp_name, user_input):
     Returns:
         list: A list of dictionaries containing formatted search results.
     """
-    skills_and_experience = get_rfp_analysis_from_db(rfp_name)
+    skills_and_experience = get_rfp_analysis(rfp_name)
     llm_input = f"Write-up: {skills_and_experience}. \n\nAdditional User Input: {user_input}"
     print(llm_input)
 

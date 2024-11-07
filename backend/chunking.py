@@ -2,7 +2,8 @@
 Chunking module for processing RFP documents.
 
 This module handles the chunking of RFP documents, including extracting the table of contents,
-validating sections, and uploading the processed content to Azure Cosmos DB.
+validating sections, and uploading the processed content to Azure Cosmos DB using the centralized
+CosmosDBManager.
 """
 
 # Standard library imports
@@ -12,12 +13,11 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 # Third-party imports
-import azure.cosmos.cosmos_client as cosmos_client
-import azure.cosmos.exceptions as exceptions
 from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI
 
 # Local imports
+from common.cosmosdb import CosmosDBManager
 from prompts import toc_prompt, section_validator_prompt_with_toc
 
 # Load environment variables
@@ -28,11 +28,8 @@ AOAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 AOAI_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AOAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 
-# Azure Cosmos DB configuration
-COSMOS_HOST = os.getenv("COSMOS_HOST")
-COSMOS_MASTER_KEY = os.getenv("COSMOS_MASTER_KEY")
-COSMOS_DATABASE_ID = os.getenv("COSMOS_DATABASE_ID")
-COSMOS_CONTAINER_ID = os.getenv("COSMOS_CONTAINER_ID")
+# Initialize CosmosDBManager
+cosmos_manager = CosmosDBManager()
 
 # Initialize Azure OpenAI clients
 primary_llm = AzureChatOpenAI(
@@ -84,7 +81,7 @@ def validate_section(section, table_of_contents):
 
     Args:
         section: The section to validate.
-        table_of_contents: The extracted table of contents. *Note* - the current version is considering the TOC, but i am still evaluating if it is necessary.
+        table_of_contents: The extracted table of contents.
 
     Returns:
         str or None: The validation result ('yes' or 'no') or None if there's an error.
@@ -177,22 +174,6 @@ def populate_sections(adi_result_object, content_dict):
 
     return content_dict
 
-def write_to_cosmos(container, json_data):
-    """
-    Write data to Azure Cosmos DB.
-
-    Args:
-        container: The Cosmos DB container to write to.
-        json_data: The data to write as a JSON object.
-    """
-    try:
-        container.create_item(body=json_data)
-        print('\nSuccess writing to cosmos...\n')
-    except exceptions.CosmosHttpResponseError as e:
-        print(f"Error writing to cosmos: Status code: {e.status_code}, Error message: {e.message}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-
 def upload_to_cosmos(filename, content_dict, table_of_contents):
     """
     Upload processed document sections and table of contents to Cosmos DB.
@@ -202,31 +183,28 @@ def upload_to_cosmos(filename, content_dict, table_of_contents):
         content_dict: A dictionary of document sections and their content.
         table_of_contents: The extracted table of contents.
     """
-    client = cosmos_client.CosmosClient(COSMOS_HOST, {'masterKey': COSMOS_MASTER_KEY})
-    
     try:
-        db = client.get_database_client(COSMOS_DATABASE_ID)
-        container = db.get_container_client(COSMOS_CONTAINER_ID)
-    except exceptions.CosmosResourceNotFoundError:
-        print(f"Database or container not found. Please ensure they exist.")
-        return
+        # Upload sections
+        for key, value in content_dict.items():
+            json_data = {
+                'id': f"{filename} - {key}",
+                'partitionKey': filename,
+                'section_id': key,
+                'section_content': value
+            }
+            cosmos_manager.create_item(json_data)
 
-    for key, value in content_dict.items():
-        json_data = {
-            'id': f"{filename} - {key}",
+        # Upload table of contents
+        toc_json = {
+            'id': f"{filename} - TOC",
             'partitionKey': filename,
-            'section_id': key,
-            'section_content': value
+            'table_of_contents': table_of_contents
         }
-        write_to_cosmos(container, json_data)
-
-    toc_json = {
-        'id': f"{filename} - TOC",
-        'partitionKey': filename,
-        'table_of_contents': table_of_contents
-    }
-    write_to_cosmos(container, toc_json)
-    print("Loading table of contents to Cosmos...")
+        cosmos_manager.create_item(toc_json)
+        print("Loading table of contents to Cosmos...")
+        
+    except Exception as e:
+        print(f"Error uploading to Cosmos DB: {str(e)}")
 
 def chunking(adi_result_object, original_filename):
     """

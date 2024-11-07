@@ -2,19 +2,11 @@ import os
 from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI
 from langchain_core.tools import tool
-import azure.cosmos.documents as documents
-import azure.cosmos.cosmos_client as cosmos_client
-import azure.cosmos.exceptions as exceptions
-from azure.cosmos.partition_key import PartitionKey
+
 
 from prompts import response_to_requirement_prompt
 
 load_dotenv()
-
-COSMOS_HOST = os.getenv('COSMOS_HOST')
-COSMOS_MASTER_KEY = os.getenv('COSMOS_MASTER_KEY')
-COSMOS_DATABASE_ID = os.getenv('COSMOS_DATABASE_ID')
-COSMOS_CONTAINER_ID = os.getenv('COSMOS_CONTAINER_ID')
 
 aoai_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 aoai_key = os.getenv("AZURE_OPENAI_API_KEY")

@@ -4,3 +4,4 @@ node_modules/
 __pycache__/
 getcodebase.py
 scripts/local-testing.py
+scripts/get-codebase.py
