@@ -157,6 +157,7 @@ def run_interaction(user_message, rfp_name):
         }
         context = get_sections.invoke(combined_args)
 
+
     llm_input = f"<Start Context>\n{context}\n<End Context>\n{user_message}"
     print(llm_input)
 
