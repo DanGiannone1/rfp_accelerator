@@ -119,7 +119,7 @@ Each module of the accelerator requires a different set of Azure services. Below
      - Create a Storage Account with hierarchical namespace enabled
      - Create a container named "rfp"
      - If you plan to use Employee Matching, create a container named "resumes" and two folders within that container named "source" and "processed". Upload your employee resumes to the "source" folder and run 
-            ```sh
+         ```sh
          py scripts/resume-indexing.py
          ```
    
