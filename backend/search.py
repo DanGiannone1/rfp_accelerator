@@ -27,7 +27,7 @@ load_dotenv()
 # Azure Cognitive Search configuration
 AI_SEARCH_ENDPOINT = os.environ["AZURE_SEARCH_ENDPOINT"]
 AI_SEARCH_KEY = os.environ["AZURE_SEARCH_KEY"]
-AI_SEARCH_INDEX = os.environ["AZURE_SEARCH_INDEX"]
+AI_SEARCH_INDEX = os.environ["AZURE_SEARCH_INDEX_RESUMES"]
 
 # Azure OpenAI configuration
 AOAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")

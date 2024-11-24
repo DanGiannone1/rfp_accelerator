@@ -37,20 +37,20 @@ CORS(app)
 
 
 
-# Azure Blob Storage configuration
-STORAGE_ACCOUNT_CONNECTION_STRING = os.getenv("STORAGE_ACCOUNT_CONNECTION_STRING")
-STORAGE_ACCOUNT_CONTAINER = os.getenv("STORAGE_ACCOUNT_CONTAINER")
-STORAGE_ACCOUNT_RESUME_CONTAINER = os.getenv("STORAGE_ACCOUNT_RESUME_CONTAINER")
+# # Azure Blob Storage configuration
+# STORAGE_ACCOUNT_CONNECTION_STRING = os.getenv("STORAGE_ACCOUNT_CONNECTION_STRING")
+# STORAGE_ACCOUNT_CONTAINER = "rfp"
+# STORAGE_ACCOUNT_RESUME_CONTAINER = os.getenv("STORAGE_ACCOUNT_RESUME_CONTAINER")
 
 # Azure OpenAI configuration
 AOAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 AOAI_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AOAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 
-# Initialize Azure clients
-blob_service_client = BlobServiceClient.from_connection_string(STORAGE_ACCOUNT_CONNECTION_STRING)
-blob_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_CONTAINER)
-blob_resume_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_RESUME_CONTAINER)
+# # Initialize Azure clients
+# blob_service_client = BlobServiceClient.from_connection_string(STORAGE_ACCOUNT_CONNECTION_STRING)
+# blob_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_CONTAINER)
+# blob_resume_container_client = blob_service_client.get_container_client(STORAGE_ACCOUNT_RESUME_CONTAINER)
 
 
 
@@ -71,13 +71,13 @@ def get_rfps_from_cosmos():
         print(f"Error reading from CosmosDB: {str(e)}")
         return []
 
-def get_rfps_from_blob_storage():
-    """Fetch RFPs from Azure Blob Storage."""
-    rfps = []
-    blobs = blob_container_client.list_blobs()
-    for blob in blobs:
-        rfps.append({"name": blob.name, "status": "Complete"})
-    return rfps
+# def get_rfps_from_blob_storage():
+#     """Fetch RFPs from Azure Blob Storage."""
+#     rfps = []
+#     blobs = blob_container_client.list_blobs()
+#     for blob in blobs:
+#         rfps.append({"name": blob.name, "status": "Complete"})
+#     return rfps
 
 # Routes
 @app.route('/select-rfp', methods=['POST'])

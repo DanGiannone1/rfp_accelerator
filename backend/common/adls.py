@@ -51,7 +51,7 @@ class ADLSManager:
         load_dotenv()
         self.storage_account_name = os.environ.get("STORAGE_ACCOUNT_NAME")
         self.storage_account_key = os.environ.get("STORAGE_ACCOUNT_KEY")
-        self.storage_account_container = os.environ.get("STORAGE_ACCOUNT_CONTAINER", "documents")
+        self.storage_account_container = os.environ.get("STORAGE_ACCOUNT_CONTAINER_RFP")
         self.tenant_id = os.environ.get("TENANT_ID", '16b3c013-d300-468d-ac64-7eda0820b6d3')
 
         if not self.storage_account_name:

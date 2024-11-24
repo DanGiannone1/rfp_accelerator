@@ -80,9 +80,10 @@ def read_pdf(input_file):
     """
     print("Attempting to read the PDF from ADLS and analyze with doc intelligence.")
     storage_account_name = os.getenv("STORAGE_ACCOUNT_NAME")
-    storage_account_container = os.getenv("STORAGE_ACCOUNT_CONTAINER")
+    storage_account_container = os.getenv("STORAGE_ACCOUNT_CONTAINER_RFP")
     
     blob_url = f"https://{storage_account_name}.blob.core.windows.net/{storage_account_container}/{input_file}"
+    print(f"Blob URL: {blob_url}")
     analyze_request = {"urlSource": blob_url}
     poller = document_intelligence_client.begin_analyze_document("prebuilt-layout", analyze_request=analyze_request)
     result = poller.result()
@@ -108,6 +109,7 @@ def process_rfp(file_content, original_filename):
     """
     try:
         # Upload file to ADLS
+        print("Uploading file to ADLS.")
         upload_result = adls_manager.upload_to_blob(file_content, original_filename)
         print(f"Upload result: {upload_result['message']}")
 
