@@ -9,7 +9,7 @@ Generative AI has the ability to transform the proposal response process from st
 
 The RFP Accelerator is an application that allows various operations to be performed against RFPs, leveraging the power of Generative AI to streamline and enhance the proposal process.
 
-![RFP Accelerator Main Image](/images/main_ui.png)
+![RFP Accelerator Main Image](/images/main_screen.png)
 
 ## Features
 
@@ -31,8 +31,8 @@ Each module of the accelerator requires a different set of Azure services. Below
 
 | Module | Required Azure Services |
 |--------|-------------------------|
-| Upload | - Azure Blob Storage<br>- Azure Document Intelligence<br>- Azure OpenAI<br>- Azure Cosmos DB<br>- Managed identity between Document Intelligence and Blob Storage |
-| Employee Matching | - Azure Blob Storage<br>- Azure Document Intelligence<br>- Azure OpenAI<br>- Azure Cosmos DB<br>- Azure AI Search |
+| Upload | - Azure Data Lake Storage<br>- Azure Document Intelligence<br>- Azure OpenAI<br>- Azure Cosmos DB<br>- Managed identity between Document Intelligence and Data Lake Storage |
+| Employee Matching | - Azure Data Lake Storage<br>- Azure Document Intelligence<br>- Azure OpenAI<br>- Azure Cosmos DB<br>- Azure AI Search |
 | RFP Analyzer | - Azure Cosmos DB<br>- Azure OpenAI |
 | Requirements Extraction | - Azure Cosmos DB<br>- Azure OpenAI |
 | Response Builder | - Azure Cosmos DB<br>- Azure OpenAI<br>- Azure AI Search (optional)<br>- Bing Search (optional)|
@@ -67,7 +67,14 @@ Each module of the accelerator requires a different set of Azure services. Below
        ```
    - Create a new Python virtual environment and install back-end dependencies:
      - Ensure you have Python installed. You can download and install it from the [official website](https://www.python.org/).
-     - Run the following command to create a virtual environment named `venv`:
+     - If you are using VS Code, you can create a virtual environment using the Command Palette:
+       - Open the Command Palette by pressing `Ctrl+Shift+P` (Windows) or `Cmd+Shift+P` (macOS).
+       - Type `Python: Create Environment` and select it.
+       - Choose `Venv` as the environment type.
+       - Select the Python interpreter you want to use.
+       - Select requirements.txt
+       - VS Code will create the virtual environment and automatically activate it. 
+     - Alternatively, you can create the virtual environment from the command line. Run the following command to create a virtual environment named `venv`:
        ```sh
        python -m venv venv
        ```
@@ -85,12 +92,43 @@ Each module of the accelerator requires a different set of Azure services. Below
        pip install -r requirements.txt
        ```
 
-3. **Configure environment variables**
+3. **Create & Configure Azure Services**
+
+   The following Azure services are required for full functionality:
+
+   - **Azure Cosmos DB**
+     - Use the NoSQL API
+     - No need to create database or container (application will handle this)
+     - If using existing database/container, ensure partition key is set to `"partitionKey"`
+   
+   - **Azure AI Search**
+     - Create with default settings
+   
+   - **Azure Document Intelligence**
+     - Deploy in a region supporting API version 2024-07-31 or later
+   
+   - **Azure OpenAI**
+     - Deploy two models:
+       - GPT-4o as primary LLM
+       - text-embedding-ada-002 for embeddings
+     - Ensure rate limit >100k tokens per minute on deployments
+   
+   - **Azure Data Lake Storage**
+     - Create a Storage Account with hierarchical namespace enabled
+   
+   - **Bing Search Service** (Optional)
+     - Required only if you want RFP responses to include web search results
+
+   **Important:** Configure authentication between Document Intelligence and Storage:
+   1. Create a managed identity for your Document Intelligence resource
+   2. Grant it the "Storage Blob Data Reader" role on your storage account
+
+4. **Configure environment variables**
    - Create a `.env` file in the root directory by copying the example file:
      ```sh
      cp example.env .env
      ```
-   - Open the `.env` file in a text editor and add the necessary environment variables as specified in the `example.env` file.
+   - Open the `.env` file and add the necessary environment variables as specified in the `example.env` file.
 
 ### Running the Application
 
