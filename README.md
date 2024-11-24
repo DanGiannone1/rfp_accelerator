@@ -1,5 +1,7 @@
 # RFP Accelerator - Transform Your Organization's Proposal Process
 
+![RFP Accelerator Main Image](/images/main_screen.png)
+
 Responding to a Request for Proposal (RFP) or Request for Information (RFI) is a common task in a corporate setting. For most organizations, this is currently a cumbersome and time-consuming process involving multiple teams coordinating for weeks or even months at a time. 
 
 Generative AI has the ability to transform the proposal response process from start to finish.
@@ -9,7 +11,7 @@ Generative AI has the ability to transform the proposal response process from st
 
 The RFP Accelerator is an application that allows various operations to be performed against RFPs, leveraging the power of Generative AI to streamline and enhance the proposal process.
 
-![RFP Accelerator Main Image](/images/main_screen.png)
+
 
 ## Features
 
@@ -105,7 +107,7 @@ Each module of the accelerator requires a different set of Azure services. Below
      - Create with default settings
    
    - **Azure Document Intelligence**
-     - Deploy in a region supporting API version 2024-07-31 or later
+     - Make sure your service can leverage API version 2024-07-31 or later (it is not available yet in some regions)
    
    - **Azure OpenAI**
      - Deploy two models:
@@ -115,6 +117,11 @@ Each module of the accelerator requires a different set of Azure services. Below
    
    - **Azure Data Lake Storage**
      - Create a Storage Account with hierarchical namespace enabled
+     - Create a container named "rfp"
+     - If you plan to use Employee Matching, create a container named "resumes" and two folders within that container named "source" and "processed". Upload your employee resumes to the "source" folder and run 
+            ```sh
+         py scripts/resume-indexing.py
+         ```
    
    - **Bing Search Service** (Optional)
      - Required only if you want RFP responses to include web search results
@@ -129,8 +136,9 @@ Each module of the accelerator requires a different set of Azure services. Below
      cp example.env .env
      ```
    - Open the `.env` file and add the necessary environment variables as specified in the `example.env` file.
+   - Make sure to restart the terminal window after making changes to the .env file 
 
-### Running the Application
+### Running the Application Locally
 
 1. Start the front-end:
    - Navigate to the `front-end` directory:
@@ -150,10 +158,10 @@ Each module of the accelerator requires a different set of Azure services. Below
      python backend/app.py
      ```
    - The back-end should now be running at `http://localhost:5000`.
+   - The back-end will attempt to authenticate to your Azure resources via the provides keys, but will fall back to DefaultAzureCredential if no key is found or key-based access is disabled due to your organization's policies. If this is the case, make sure to login to azure via installing the Azure CLI and running "az login".
 
 ## Usage
 
-[Add instructions on how to use the RFP Accelerator, including any API endpoints or user interface guidance.]
 
 ## Contributing
 
@@ -162,3 +170,5 @@ We welcome contributions to the RFP Accelerator! Please see our [Contributing Gu
 ## License
 
 ## Support
+
+Reach out to dangiannone@microsoft.com for questions & support
